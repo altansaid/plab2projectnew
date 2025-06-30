@@ -2,8 +2,9 @@ import axios from 'axios';
 import { Client } from '@stomp/stompjs';
 import { store } from '../store';
 
-const API_URL = 'http://localhost:8080/api';
-const WS_URL = 'http://localhost:8080/ws';
+// Environment-based API URLs
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:8080/ws';
 
 // Axios instance
 const api = axios.create({
