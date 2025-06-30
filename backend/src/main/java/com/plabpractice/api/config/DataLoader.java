@@ -2,10 +2,13 @@ package com.plabpractice.api.config;
 
 import com.plabpractice.api.model.Case;
 import com.plabpractice.api.model.Category;
+import com.plabpractice.api.model.User;
 import com.plabpractice.api.repository.CaseRepository;
 import com.plabpractice.api.repository.CategoryRepository;
+import com.plabpractice.api.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -17,12 +20,45 @@ public class DataLoader implements CommandLineRunner {
         @Autowired
         private CaseRepository caseRepository;
 
+        @Autowired
+        private UserRepository userRepository;
+
+        @Autowired
+        private PasswordEncoder passwordEncoder;
+
         @Override
         public void run(String... args) throws Exception {
+                // Load default users if database is empty
+                if (userRepository.count() == 0) {
+                        loadDefaultUsers();
+                }
+
                 // Only load sample cases if database is empty (first startup)
                 if (caseRepository.count() == 0) {
                         loadSampleCases();
                 }
+        }
+
+        private void loadDefaultUsers() {
+                // Create default admin user
+                User admin = new User();
+                admin.setName("Admin User");
+                admin.setEmail("admin@plab.com");
+                admin.setPassword(passwordEncoder.encode("admin123"));
+                admin.setRole(User.Role.ADMIN);
+                userRepository.save(admin);
+
+                // Create default regular user
+                User user = new User();
+                user.setName("Test User");
+                user.setEmail("user@plab.com");
+                user.setPassword(passwordEncoder.encode("user123"));
+                user.setRole(User.Role.USER);
+                userRepository.save(user);
+
+                System.out.println("Default users created:");
+                System.out.println("Admin: admin@plab.com / admin123");
+                System.out.println("User: user@plab.com / user123");
         }
 
         private void loadSampleCases() {

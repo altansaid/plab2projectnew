@@ -1,6 +1,7 @@
 package com.plabpractice.api.security;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -32,22 +33,44 @@ public class WebSecurityConfig {
     @Autowired
     private CustomUserDetailsService userDetailsService;
 
+    @Value("${cors.allowed-origins}")
+    private String allowedOrigins;
+
+    @Value("${spring.h2.console.enabled:false}")
+    private boolean h2ConsoleEnabled;
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        return http
+        HttpSecurity httpSecurity = http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/ws/**").permitAll()
-                        .requestMatchers("/h2-console/**").permitAll()
-                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .anyRequest().authenticated())
+                .authorizeHttpRequests(auth -> {
+                    auth.requestMatchers("/api/auth/**").permitAll()
+                            .requestMatchers("/ws/**").permitAll()
+                            .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll();
+
+                    // Only allow H2 console access if explicitly enabled (development only)
+                    if (h2ConsoleEnabled) {
+                        auth.requestMatchers("/h2-console/**").permitAll();
+                    }
+
+                    auth.anyRequest().authenticated();
+                })
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .headers(headers -> headers.frameOptions().disable()) // For H2 console
-                .build();
+                .headers(headers -> {
+                    // Prevent clickjacking
+                    headers.frameOptions().deny();
+                    headers.contentTypeOptions();
+
+                    // Only disable frame options for H2 console in development
+                    if (h2ConsoleEnabled) {
+                        headers.frameOptions().sameOrigin();
+                    }
+                });
+
+        return httpSecurity.build();
     }
 
     @Bean
