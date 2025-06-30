@@ -62,10 +62,6 @@ backend/data/
 *.tar.gz
 *.rar
 
-# Gradle specific
-.gradle/
-#gradlew
-#gradlew.bat
 
 # Maven specific
 target/
