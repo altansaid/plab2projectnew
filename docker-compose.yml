@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14.18
+    container_name: plab2-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: plab2_practice
+      POSTGRES_USER: plab2_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-your_secure_password_here}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - plab2-network
+
+  # Spring Boot Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: plab2-backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/plab2_practice
+      SPRING_DATASOURCE_USERNAME: plab2_user
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-your_secure_password_here}
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_key_here_minimum_32_characters}
+    ports:
+      - "8080:8080"
+    networks:
+      - plab2-network
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+
+networks:
+  plab2-network:
+    driver: bridge 

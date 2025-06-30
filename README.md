@@ -188,6 +188,60 @@ Redux Store                                        PostgreSQL DB
    - Backend API: http://localhost:8080
    - API Documentation: http://localhost:8080/swagger-ui.html
 
+## 🐳 Docker & Render Deployment
+
+### **Render.com Deployment** (Recommended for Production)
+
+Your application is now **Render-ready** with optimized Docker configuration!
+
+**Required Environment Variables in Render:**
+
+```bash
+# Application
+SPRING_PROFILES_ACTIVE=render
+PORT=8080
+
+# Database (Auto-provided by Render PostgreSQL)
+DATABASE_URL=postgresql://...
+DATABASE_USERNAME=your_db_user
+DATABASE_PASSWORD=your_db_password
+
+# Security
+JWT_SECRET=your_secure_jwt_secret_minimum_32_characters_long
+
+# CORS
+CORS_ALLOWED_ORIGINS=https://your-frontend-url.com
+```
+
+**Deployment Steps:**
+
+1. **Push to GitHub** with your updated code
+2. **Create Web Service** in Render
+3. **Connect GitHub repo**
+4. **Add PostgreSQL database** (Render auto-configures connection)
+5. **Set environment variables** above in Render dashboard
+6. **Deploy!** Render uses your Dockerfile automatically
+
+**Health Check Endpoint:** `https://your-app.onrender.com/actuator/health`
+
+### **Local Docker Testing**
+
+```bash
+# Build image
+cd backend
+docker build -t plab2-backend .
+
+# Run with environment variables
+docker run -d \
+  -p 8080:8080 \
+  -e SPRING_PROFILES_ACTIVE=render \
+  -e DATABASE_URL=your_db_url \
+  -e JWT_SECRET=your_jwt_secret \
+  -e CORS_ALLOWED_ORIGINS=http://localhost:3000 \
+  --name plab2-backend \
+  plab2-backend
+```
+
 ## 📱 Application Flow
 
 1. **User Registration/Login** with secure JWT authentication
