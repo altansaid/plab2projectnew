@@ -121,6 +121,9 @@ public class SessionController {
             Session session = sessionOpt.get();
             List<String> availableRoles = sessionService.getAvailableRoles(session);
 
+            // Fetch participants separately to avoid lazy loading issues
+            List<SessionParticipant> participants = sessionService.getSessionParticipants(session.getId());
+
             // Check if user is already in session and get their role
             SessionParticipant.Role userRole = sessionService.getUserRoleInSession(sessionCode, user);
             boolean isHost = sessionService.isUserHost(sessionCode, user);
@@ -129,7 +132,7 @@ public class SessionController {
             response.put("sessionCode", session.getCode());
             response.put("title", session.getTitle());
             response.put("availableRoles", availableRoles);
-            response.put("participants", session.getParticipants());
+            response.put("participants", participants);
             response.put("userRole", userRole != null ? userRole.toString() : null);
             response.put("isHost", isHost);
 
@@ -160,8 +163,12 @@ public class SessionController {
             SessionParticipant.Role userRole = sessionService.getUserRoleInSession(sessionCode, user);
             boolean isHost = sessionService.isUserHost(sessionCode, user);
 
+            // Fetch participants separately to avoid lazy loading issues
+            List<SessionParticipant> participants = sessionService.getSessionParticipants(session.getId());
+
             Map<String, Object> response = new HashMap<>();
             response.put("session", session);
+            response.put("participants", participants);
             response.put("message", "Successfully joined session with role: " + role);
             response.put("userRole", userRole != null ? userRole.toString() : null);
             response.put("isHost", isHost);
@@ -206,8 +213,12 @@ public class SessionController {
             // Broadcast session update to all participants
             webSocketService.broadcastSessionUpdate(sessionCode);
 
+            // Fetch participants separately to avoid lazy loading issues
+            List<SessionParticipant> participants = sessionService.getSessionParticipants(session.getId());
+
             Map<String, Object> response = new HashMap<>();
             response.put("session", session);
+            response.put("participants", participants);
             response.put("message", "Session configured successfully");
 
             return ResponseEntity.ok(response);
@@ -295,6 +306,9 @@ public class SessionController {
             Session session = sessionOpt.get();
             Map<String, Object> response = new HashMap<>();
 
+            // Fetch participants separately to avoid lazy loading issues
+            List<SessionParticipant> participants = sessionService.getSessionParticipants(session.getId());
+
             // Include session data
             response.put("id", session.getId());
             response.put("title", session.getTitle());
@@ -308,7 +322,7 @@ public class SessionController {
             response.put("selectedTopics", session.getSelectedTopics());
             response.put("selectedCase", session.getSelectedCase());
             response.put("timeRemaining", session.getTimeRemaining());
-            response.put("participants", session.getParticipants());
+            response.put("participants", participants);
             response.put("createdAt", session.getCreatedAt());
             response.put("startTime", session.getStartTime());
             response.put("endTime", session.getEndTime());
@@ -346,8 +360,13 @@ public class SessionController {
             }
 
             Session session = sessionOpt.get();
+
+            // Fetch participants separately to avoid lazy loading issues
+            List<SessionParticipant> participants = sessionService.getSessionParticipants(session.getId());
+
             Map<String, Object> response = new HashMap<>();
             response.put("session", session);
+            response.put("participants", participants);
             response.put("message", "Successfully joined session");
 
             return ResponseEntity.ok(response);
@@ -369,7 +388,24 @@ public class SessionController {
     public ResponseEntity<?> getActiveSessions() {
         try {
             List<Session> activeSessions = sessionRepository.findByStatus(Session.Status.IN_PROGRESS);
-            return ResponseEntity.ok(activeSessions);
+            // Convert to DTOs to avoid lazy loading issues
+            List<Map<String, Object>> sessionDTOs = activeSessions.stream()
+                    .map(session -> {
+                        Map<String, Object> sessionData = new HashMap<>();
+                        sessionData.put("id", session.getId());
+                        sessionData.put("title", session.getTitle());
+                        sessionData.put("code", session.getCode());
+                        sessionData.put("status", session.getStatus());
+                        sessionData.put("phase", session.getPhase());
+                        sessionData.put("createdAt", session.getCreatedAt());
+                        sessionData.put("startTime", session.getStartTime());
+                        // Get participant count separately
+                        int participantCount = sessionService.getSessionParticipants(session.getId()).size();
+                        sessionData.put("participantCount", participantCount);
+                        return sessionData;
+                    })
+                    .toList();
+            return ResponseEntity.ok(sessionDTOs);
         } catch (Exception e) {
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("error", "Failed to get active sessions: " + e.getMessage());

@@ -210,7 +210,7 @@ DATABASE_PASSWORD=your_db_password
 JWT_SECRET=your_secure_jwt_secret_minimum_32_characters_long
 
 # CORS
-CORS_ALLOWED_ORIGINS=https://your-frontend-url.com
+CORS_ALLOWED_ORIGINS=https://plab2projectnew.vercel.app
 ```
 
 **Deployment Steps:**
@@ -279,6 +279,32 @@ docker run -d \
 - [ ] Mobile application for iOS/Android
 - [ ] Video/audio integration for realistic consultations
 - [ ] Multi-language support for international users
+
+## 🚀 Live Deployment
+
+**Frontend (Vercel):** [https://plab2projectnew.vercel.app/](https://plab2projectnew.vercel.app/)
+**Backend (Render):** [https://plab2project-backend.onrender.com](https://plab2project-backend.onrender.com)
+
+## Environment Configuration
+
+For production deployment, set these environment variables:
+
+### Frontend (Vercel)
+
+```bash
+VITE_API_URL=https://plab2project-backend.onrender.com/api
+VITE_WS_URL=https://plab2project-backend.onrender.com/ws
+```
+
+### Backend (Render)
+
+```bash
+CORS_ALLOWED_ORIGINS=https://plab2projectnew.vercel.app
+JWT_SECRET=your_secure_jwt_secret
+DATABASE_URL=your_postgresql_connection_string
+DATABASE_USERNAME=your_db_username
+DATABASE_PASSWORD=your_db_password
+```
 
 ---
 

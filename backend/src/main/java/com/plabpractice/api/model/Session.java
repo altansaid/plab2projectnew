@@ -3,6 +3,7 @@ package com.plabpractice.api.model;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -71,9 +72,11 @@ public class Session {
     private User createdBy;
 
     @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private List<SessionParticipant> participants = new ArrayList<>();
 
     @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private List<Feedback> feedbacks = new ArrayList<>();
 
     public enum Status {

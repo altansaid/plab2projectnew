@@ -28,6 +28,6 @@ public class SessionDTO {
         this.createdAt = session.getCreatedAt();
         this.startTime = session.getStartTime();
         this.endTime = session.getEndTime();
-        this.participantCount = session.getParticipants() != null ? session.getParticipants().size() : 0;
+        this.participantCount = 0; // Will be set separately to avoid lazy loading
     }
 }

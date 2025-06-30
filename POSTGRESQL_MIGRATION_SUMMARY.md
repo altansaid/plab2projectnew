@@ -65,7 +65,7 @@ cd backend
 ### Production Mode (Environment Variables)
 
 ```bash
-# Set environment variables first (see .env.production.template)
+# Set environment variables first (see .env.template)
 export DATABASE_URL="jdbc:postgresql://prod-host:5432/plabdb"
 export DATABASE_USERNAME="prod_user"
 export DATABASE_PASSWORD="secure_password"

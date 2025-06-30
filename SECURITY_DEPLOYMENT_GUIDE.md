@@ -4,7 +4,7 @@
 
 ### 1. Environment Variables Configuration
 
-Create a `.env.production` file with the following secure values:
+Create a `.env` file with the following secure values:
 
 ```bash
 # Database Configuration (Replace with your production database)
@@ -18,7 +18,7 @@ JWT_SECRET=your_very_long_secure_random_jwt_secret_key_at_least_256_bits
 JWT_EXPIRATION=86400000
 
 # CORS Configuration (Replace with your actual frontend domains)
-CORS_ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+CORS_ALLOWED_ORIGINS=https://plab2projectnew.vercel.app
 
 # Security Settings
 H2_CONSOLE_ENABLED=false
