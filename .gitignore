@@ -87,4 +87,19 @@ spring.log
 
 # Temporary files
 *.tmp
-*.temp 
+*.temp
+
+# Security - Additional patterns to prevent accidental commits
+*password*
+*secret*
+*key*
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+setup-postgresql-with-passwords.sql
+*-credentials.sql
+.env*
+!.env.example
+!.env.template 

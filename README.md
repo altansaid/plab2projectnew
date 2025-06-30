@@ -159,8 +159,12 @@ Redux Store                                        PostgreSQL DB
    git clone <repository-url>
    cd plab2projectnewmeta
 
-   # Setup PostgreSQL database
-   psql -U postgres -f setup-postgresql.sql
+   # Setup PostgreSQL database (secure method)
+   ./setup-postgresql-secure.sh
+
+   # OR manually with your own password:
+   # Edit setup-postgresql.sql to replace 'YOUR_SECURE_PASSWORD_HERE'
+   # psql -U postgres -f setup-postgresql.sql
    ```
 
 2. **Backend Setup**
