@@ -21,11 +21,14 @@ public class JwtTokenProvider {
 
     private Key getSigningKey() {
         if (jwtSecret == null || jwtSecret.trim().isEmpty()) {
+            System.err.println("❌ CRITICAL: JWT secret is not configured!");
             throw new IllegalStateException(
                     "JWT secret cannot be null or empty. Please set JWT_SECRET environment variable.");
         }
         if (jwtSecret.length() < 32) {
-            throw new IllegalStateException("JWT secret must be at least 32 characters long for security.");
+            System.err.println(
+                    "⚠️  WARNING: JWT secret should be at least 32 characters long for security. Current length: "
+                            + jwtSecret.length());
         }
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }

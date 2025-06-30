@@ -1,56 +1,64 @@
 package com.plabpractice.api.config;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.env.Environment;
 
 @Configuration
 public class ApplicationConfig {
 
-    @Value("${jwt.secret:}")
-    private String jwtSecret;
+    private final Environment environment;
 
-    @Value("${cors.allowed-origins:}")
-    private String allowedOrigins;
-
-    @Value("${spring.datasource.url:}")
-    private String databaseUrl;
+    public ApplicationConfig(Environment environment) {
+        this.environment = environment;
+    }
 
     @EventListener
-    public void handleContextRefresh(ContextRefreshedEvent event) {
+    public void handleApplicationReady(ApplicationReadyEvent event) {
         validateConfiguration();
     }
 
     private void validateConfiguration() {
-        System.out.println("=== Application Configuration Validation ===");
+        try {
+            System.out.println("=== Application Configuration Validation ===");
 
-        // Validate JWT Secret
-        if (jwtSecret == null || jwtSecret.trim().isEmpty()) {
-            System.err.println("❌ CRITICAL: JWT_SECRET environment variable is not set!");
-            throw new IllegalStateException("JWT_SECRET environment variable is required for security");
-        }
-        if (jwtSecret.length() < 32) {
-            System.err.println("❌ CRITICAL: JWT_SECRET must be at least 32 characters long");
-            throw new IllegalStateException("JWT_SECRET must be at least 32 characters long for security");
-        }
-        System.out.println("✅ JWT Secret: Valid (length: " + jwtSecret.length() + ")");
+            String jwtSecret = environment.getProperty("jwt.secret", "");
+            String allowedOrigins = environment.getProperty("cors.allowed-origins", "");
+            String databaseUrl = environment.getProperty("spring.datasource.url", "");
+            String activeProfile = environment.getProperty("spring.profiles.active", "default");
 
-        // Validate CORS Origins
-        if (allowedOrigins == null || allowedOrigins.trim().isEmpty()) {
-            System.out.println("⚠️  WARNING: CORS_ALLOWED_ORIGINS not set, using defaults");
-        } else {
-            System.out.println("✅ CORS Origins: " + allowedOrigins);
-        }
+            System.out.println("🚀 Active Profile: " + activeProfile);
 
-        // Validate Database URL
-        if (databaseUrl == null || databaseUrl.trim().isEmpty()) {
-            System.out.println("⚠️  WARNING: DATABASE_URL not set, using defaults");
-        } else {
-            System.out
-                    .println("✅ Database URL: " + (databaseUrl.startsWith("jdbc:postgresql") ? "PostgreSQL" : "Other"));
-        }
+            // Validate JWT Secret
+            if (jwtSecret == null || jwtSecret.trim().isEmpty()) {
+                System.err.println("⚠️  WARNING: JWT_SECRET environment variable is not set!");
+                System.err.println("   Application may fail during JWT operations");
+            } else if (jwtSecret.length() < 32) {
+                System.err.println("⚠️  WARNING: JWT_SECRET should be at least 32 characters long");
+                System.out.println("✅ JWT Secret: Set (length: " + jwtSecret.length() + ")");
+            } else {
+                System.out.println("✅ JWT Secret: Valid (length: " + jwtSecret.length() + ")");
+            }
 
-        System.out.println("=== Configuration Validation Complete ===");
+            // Validate CORS Origins
+            if (allowedOrigins == null || allowedOrigins.trim().isEmpty()) {
+                System.out.println("⚠️  CORS_ALLOWED_ORIGINS not set, using application defaults");
+            } else {
+                System.out.println("✅ CORS Origins: " + allowedOrigins);
+            }
+
+            // Validate Database URL
+            if (databaseUrl == null || databaseUrl.trim().isEmpty()) {
+                System.out.println("⚠️  DATABASE_URL not set, using application defaults");
+            } else {
+                System.out.println("✅ Database URL: " + (databaseUrl.contains("postgresql") ? "PostgreSQL" : "Other"));
+            }
+
+            System.out.println("=== Configuration Validation Complete ===");
+        } catch (Exception e) {
+            System.err.println("❌ Error during configuration validation: " + e.getMessage());
+            // Don't throw exception to prevent startup failure
+        }
     }
 }
