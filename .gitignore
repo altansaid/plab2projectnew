@@ -64,8 +64,8 @@ backend/data/
 
 # Gradle specific
 .gradle/
-gradlew
-gradlew.bat
+#gradlew
+#gradlew.bat
 
 # Maven specific
 target/
