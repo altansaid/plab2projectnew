@@ -1,5 +1,6 @@
 package com.plabpractice.api.controller;
 
+import com.plabpractice.api.dto.SessionParticipantDTO;
 import com.plabpractice.api.model.Session;
 import com.plabpractice.api.model.SessionParticipant;
 import com.plabpractice.api.model.User;
@@ -121,8 +122,8 @@ public class SessionController {
             Session session = sessionOpt.get();
             List<String> availableRoles = sessionService.getAvailableRoles(session);
 
-            // Fetch participants separately to avoid lazy loading issues
-            List<SessionParticipant> participants = sessionService.getSessionParticipants(session.getId());
+            // Fetch participants as DTOs to avoid lazy loading issues
+            List<SessionParticipantDTO> participantDTOs = sessionService.getSessionParticipantDTOs(session.getId());
 
             // Check if user is already in session and get their role
             SessionParticipant.Role userRole = sessionService.getUserRoleInSession(sessionCode, user);
@@ -132,7 +133,7 @@ public class SessionController {
             response.put("sessionCode", session.getCode());
             response.put("title", session.getTitle());
             response.put("availableRoles", availableRoles);
-            response.put("participants", participants);
+            response.put("participants", participantDTOs);
             response.put("userRole", userRole != null ? userRole.toString() : null);
             response.put("isHost", isHost);
 
@@ -163,12 +164,12 @@ public class SessionController {
             SessionParticipant.Role userRole = sessionService.getUserRoleInSession(sessionCode, user);
             boolean isHost = sessionService.isUserHost(sessionCode, user);
 
-            // Fetch participants separately to avoid lazy loading issues
-            List<SessionParticipant> participants = sessionService.getSessionParticipants(session.getId());
+            // Fetch participants as DTOs to avoid lazy loading issues
+            List<SessionParticipantDTO> participantDTOs = sessionService.getSessionParticipantDTOs(session.getId());
 
             Map<String, Object> response = new HashMap<>();
             response.put("session", session);
-            response.put("participants", participants);
+            response.put("participants", participantDTOs);
             response.put("message", "Successfully joined session with role: " + role);
             response.put("userRole", userRole != null ? userRole.toString() : null);
             response.put("isHost", isHost);
@@ -213,12 +214,12 @@ public class SessionController {
             // Broadcast session update to all participants
             webSocketService.broadcastSessionUpdate(sessionCode);
 
-            // Fetch participants separately to avoid lazy loading issues
-            List<SessionParticipant> participants = sessionService.getSessionParticipants(session.getId());
+            // Fetch participants as DTOs to avoid lazy loading issues
+            List<SessionParticipantDTO> participantDTOs = sessionService.getSessionParticipantDTOs(session.getId());
 
             Map<String, Object> response = new HashMap<>();
             response.put("session", session);
-            response.put("participants", participants);
+            response.put("participants", participantDTOs);
             response.put("message", "Session configured successfully");
 
             return ResponseEntity.ok(response);
@@ -306,8 +307,8 @@ public class SessionController {
             Session session = sessionOpt.get();
             Map<String, Object> response = new HashMap<>();
 
-            // Fetch participants separately to avoid lazy loading issues
-            List<SessionParticipant> participants = sessionService.getSessionParticipants(session.getId());
+            // Fetch participants as DTOs to avoid lazy loading issues
+            List<SessionParticipantDTO> participantDTOs = sessionService.getSessionParticipantDTOs(session.getId());
 
             // Include session data
             response.put("id", session.getId());
@@ -322,7 +323,7 @@ public class SessionController {
             response.put("selectedTopics", session.getSelectedTopics());
             response.put("selectedCase", session.getSelectedCase());
             response.put("timeRemaining", session.getTimeRemaining());
-            response.put("participants", participants);
+            response.put("participants", participantDTOs);
             response.put("createdAt", session.getCreatedAt());
             response.put("startTime", session.getStartTime());
             response.put("endTime", session.getEndTime());
@@ -361,12 +362,12 @@ public class SessionController {
 
             Session session = sessionOpt.get();
 
-            // Fetch participants separately to avoid lazy loading issues
-            List<SessionParticipant> participants = sessionService.getSessionParticipants(session.getId());
+            // Fetch participants as DTOs to avoid lazy loading issues
+            List<SessionParticipantDTO> participantDTOs = sessionService.getSessionParticipantDTOs(session.getId());
 
             Map<String, Object> response = new HashMap<>();
             response.put("session", session);
-            response.put("participants", participants);
+            response.put("participants", participantDTOs);
             response.put("message", "Successfully joined session");
 
             return ResponseEntity.ok(response);

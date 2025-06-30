@@ -3,6 +3,8 @@ package com.plabpractice.api.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.plabpractice.api.dto.SessionDTO;
+import com.plabpractice.api.dto.SessionParticipantDTO;
+import com.plabpractice.api.dto.UserDTO;
 import com.plabpractice.api.model.Case;
 import com.plabpractice.api.model.Session;
 import com.plabpractice.api.model.SessionParticipant;
@@ -94,6 +96,28 @@ public class SessionService {
 
     public List<SessionParticipant> getSessionParticipants(Long sessionId) {
         return sessionParticipantRepository.findBySessionId(sessionId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<SessionParticipantDTO> getSessionParticipantDTOs(Long sessionId) {
+        List<SessionParticipant> participants = sessionParticipantRepository.findBySessionId(sessionId);
+        return participants.stream()
+                .map(participant -> {
+                    SessionParticipantDTO dto = new SessionParticipantDTO();
+                    dto.setId(participant.getId());
+                    dto.setRole(participant.getRole());
+                    // Create UserDTO within transaction scope
+                    if (participant.getUser() != null) {
+                        UserDTO userDTO = new UserDTO();
+                        userDTO.setId(participant.getUser().getId());
+                        userDTO.setName(participant.getUser().getName());
+                        userDTO.setEmail(participant.getUser().getEmail());
+                        userDTO.setRole(participant.getUser().getRole());
+                        dto.setUser(userDTO);
+                    }
+                    return dto;
+                })
+                .toList();
     }
 
     public List<Session> getUserSessions(Long userId) {

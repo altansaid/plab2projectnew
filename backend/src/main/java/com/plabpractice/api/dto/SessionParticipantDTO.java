@@ -13,7 +13,10 @@ public class SessionParticipantDTO {
 
     public SessionParticipantDTO(SessionParticipant participant) {
         this.id = participant.getId();
-        this.user = new UserDTO(participant.getUser());
         this.role = participant.getRole();
+        // Handle user safely - only create UserDTO if user is loaded
+        if (participant.getUser() != null) {
+            this.user = new UserDTO(participant.getUser());
+        }
     }
 }
