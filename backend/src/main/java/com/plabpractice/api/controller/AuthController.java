@@ -36,25 +36,7 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@jakarta.validation.Valid @RequestBody LoginRequest loginRequest) {
         try {
-            // First check if user exists
-            User user = userRepository.findByEmail(loginRequest.getEmail())
-                    .orElse(null);
-
-            if (user == null) {
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("error", "User not found for email: " + loginRequest.getEmail());
-                return ResponseEntity.badRequest().body(errorResponse);
-            }
-
-            // Manual password check for debugging
-            boolean passwordMatches = passwordEncoder.matches(loginRequest.getPassword(), user.getPassword());
-            if (!passwordMatches) {
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("error", "Password does not match - manual check failed");
-                return ResponseEntity.badRequest().body(errorResponse);
-            }
-
-            // If we get here, manual validation passed, try Spring Security
+            // Authenticate user with Spring Security (single password verification)
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             loginRequest.getEmail(),
@@ -63,6 +45,10 @@ public class AuthController {
             SecurityContextHolder.getContext().setAuthentication(authentication);
             String jwt = tokenProvider.generateToken(authentication);
 
+            // Get user details after successful authentication
+            User user = userRepository.findByEmail(loginRequest.getEmail())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
             Map<String, Object> response = new HashMap<>();
             response.put("token", jwt);
             response.put("user", user);
@@ -70,7 +56,7 @@ public class AuthController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("error", "Spring Security authentication failed: " + e.getMessage());
+            errorResponse.put("error", "Invalid email or password");
             return ResponseEntity.badRequest().body(errorResponse);
         }
     }

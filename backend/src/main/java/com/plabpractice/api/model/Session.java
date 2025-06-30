@@ -11,7 +11,11 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @Entity
-@Table(name = "sessions")
+@Table(name = "sessions", indexes = {
+        @Index(name = "idx_session_code", columnList = "session_code"),
+        @Index(name = "idx_session_status", columnList = "status"),
+        @Index(name = "idx_session_created_by", columnList = "created_by")
+})
 public class Session {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

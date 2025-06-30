@@ -92,7 +92,10 @@ public class WebSecurityConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        // Use cost factor 10 (default is 10, but explicitly set for clarity)
+        // This provides good security while maintaining reasonable performance
+        // Each increment doubles the computation time: 8=~50ms, 10=~200ms, 12=~800ms
+        return new BCryptPasswordEncoder(10);
     }
 
     @Bean

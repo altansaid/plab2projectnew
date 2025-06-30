@@ -100,13 +100,14 @@ public class SessionService {
 
     @Transactional(readOnly = true)
     public List<SessionParticipantDTO> getSessionParticipantDTOs(Long sessionId) {
-        List<SessionParticipant> participants = sessionParticipantRepository.findBySessionId(sessionId);
+        // Use optimized query to prevent N+1 issue
+        List<SessionParticipant> participants = sessionParticipantRepository.findBySessionIdWithUser(sessionId);
         return participants.stream()
                 .map(participant -> {
                     SessionParticipantDTO dto = new SessionParticipantDTO();
                     dto.setId(participant.getId());
                     dto.setRole(participant.getRole());
-                    // Create UserDTO within transaction scope
+                    // User is already eagerly loaded, no additional query needed
                     if (participant.getUser() != null) {
                         UserDTO userDTO = new UserDTO();
                         userDTO.setId(participant.getUser().getId());
