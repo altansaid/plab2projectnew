@@ -1,8 +1,0 @@
-# Environment Variables for Docker Deployment
-# Copy this to .env and update with your secure values
-
-# Database password (minimum 12 characters)
-DB_PASSWORD=your_very_secure_database_password_2024
-
-# JWT secret key (minimum 32 characters for security)
-JWT_SECRET=your_jwt_secret_key_here_must_be_at_least_32_characters_long 
