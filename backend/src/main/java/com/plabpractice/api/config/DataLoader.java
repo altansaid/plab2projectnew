@@ -6,36 +6,57 @@ import com.plabpractice.api.model.User;
 import com.plabpractice.api.repository.CaseRepository;
 import com.plabpractice.api.repository.CategoryRepository;
 import com.plabpractice.api.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 @Component
 public class DataLoader implements CommandLineRunner {
 
-        @Autowired
-        private CategoryRepository categoryRepository;
+        private final CategoryRepository categoryRepository;
+        private final CaseRepository caseRepository;
+        private final UserRepository userRepository;
+        private final PasswordEncoder passwordEncoder;
 
-        @Autowired
-        private CaseRepository caseRepository;
-
-        @Autowired
-        private UserRepository userRepository;
-
-        @Autowired
-        private PasswordEncoder passwordEncoder;
+        // Constructor injection with @Lazy to break circular dependency
+        public DataLoader(CategoryRepository categoryRepository,
+                        CaseRepository caseRepository,
+                        UserRepository userRepository,
+                        @Lazy PasswordEncoder passwordEncoder) {
+                this.categoryRepository = categoryRepository;
+                this.caseRepository = caseRepository;
+                this.userRepository = userRepository;
+                this.passwordEncoder = passwordEncoder;
+        }
 
         @Override
         public void run(String... args) throws Exception {
-                // Load default users if database is empty
-                if (userRepository.count() == 0) {
-                        loadDefaultUsers();
-                }
+                try {
+                        System.out.println("=== DataLoader: Starting data initialization ===");
 
-                // Only load sample cases if database is empty (first startup)
-                if (caseRepository.count() == 0) {
-                        loadSampleCases();
+                        // Load default users if database is empty
+                        if (userRepository.count() == 0) {
+                                System.out.println("Database is empty, loading default users...");
+                                loadDefaultUsers();
+                        } else {
+                                System.out.println("Users already exist, skipping user creation");
+                        }
+
+                        // Only load sample cases if database is empty (first startup)
+                        if (caseRepository.count() == 0) {
+                                System.out.println("Loading sample cases...");
+                                loadSampleCases();
+                        } else {
+                                System.out.println("Cases already exist, skipping case creation");
+                        }
+
+                        System.out.println("=== DataLoader: Initialization complete ===");
+                } catch (Exception e) {
+                        System.err.println("❌ Error during data loading: " + e.getMessage());
+                        e.printStackTrace();
+                        // Don't throw the exception to prevent application startup failure
+                        System.err.println("⚠️  Application will continue without sample data");
                 }
         }
 

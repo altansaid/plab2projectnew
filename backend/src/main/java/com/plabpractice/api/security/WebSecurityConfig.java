@@ -27,11 +27,15 @@ import java.util.Arrays;
 @EnableMethodSecurity
 public class WebSecurityConfig {
 
-    @Autowired
-    private JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final CustomUserDetailsService userDetailsService;
 
-    @Autowired
-    private CustomUserDetailsService userDetailsService;
+    // Constructor injection to avoid circular dependencies
+    public WebSecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
+            CustomUserDetailsService userDetailsService) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.userDetailsService = userDetailsService;
+    }
 
     @Value("${cors.allowed-origins}")
     private String allowedOrigins;

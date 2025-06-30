@@ -20,6 +20,13 @@ public class JwtTokenProvider {
     private int jwtExpirationInMs;
 
     private Key getSigningKey() {
+        if (jwtSecret == null || jwtSecret.trim().isEmpty()) {
+            throw new IllegalStateException(
+                    "JWT secret cannot be null or empty. Please set JWT_SECRET environment variable.");
+        }
+        if (jwtSecret.length() < 32) {
+            throw new IllegalStateException("JWT secret must be at least 32 characters long for security.");
+        }
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
 
