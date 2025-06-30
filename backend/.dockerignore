@@ -1,4 +1,39 @@
-.gradle
-build
+# Build artifacts
+
+build/
+!build/libs/
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
 *.log
+logs/
+backend.log
+
+# Data and cache
+data/
+*.hprof
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
 *.md
+
+# Environment files
+.env*
+
+# Test reports
+test-results/
+reports/

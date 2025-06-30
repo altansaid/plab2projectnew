@@ -15,7 +15,7 @@ backend/build/
 backend/target/
 backend/out/
 backend/.gradle/
-backend/gradle/wrapper/gradle-wrapper.jar
+
 
 # IDE files
 .vscode/
