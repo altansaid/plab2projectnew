@@ -9,6 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.jdbc.DataSourceBuilder;
 
 import javax.sql.DataSource;
+import java.net.URI;
 
 @Configuration
 public class ApplicationConfig {
@@ -23,20 +24,55 @@ public class ApplicationConfig {
     @ConfigurationProperties("spring.datasource")
     public DataSource dataSource() {
         String databaseUrl = environment.getProperty("DATABASE_URL");
+        String jdbcUrl = null;
+        String username = null;
+        String password = null;
 
-        // Transform Render's postgresql:// URL to JDBC format
+        // Parse Render's DATABASE_URL format:
+        // postgresql://username:password@host:port/database
         if (databaseUrl != null && databaseUrl.startsWith("postgresql://")) {
-            databaseUrl = "jdbc:" + databaseUrl;
-            System.out.println("🔄 Transformed DATABASE_URL for JDBC: "
-                    + databaseUrl.substring(0, Math.min(50, databaseUrl.length())) + "...");
+            try {
+                URI uri = URI.create(databaseUrl);
+
+                // Extract components
+                String host = uri.getHost();
+                int port = uri.getPort();
+                String database = uri.getPath().substring(1); // Remove leading '/'
+
+                // Extract username and password from userInfo
+                String userInfo = uri.getUserInfo();
+                if (userInfo != null && userInfo.contains(":")) {
+                    String[] credentials = userInfo.split(":", 2);
+                    username = credentials[0];
+                    password = credentials[1];
+                }
+
+                // Construct proper JDBC URL
+                jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s", host, port, database);
+
+                System.out.println("🔄 Parsed DATABASE_URL successfully:");
+                System.out.println("   Host: " + host);
+                System.out.println("   Port: " + port);
+                System.out.println("   Database: " + database);
+                System.out.println("   Username: "
+                        + (username != null ? username.substring(0, Math.min(3, username.length())) + "***" : "null"));
+                System.out.println("   JDBC URL: " + jdbcUrl);
+
+            } catch (Exception e) {
+                System.err.println("❌ Error parsing DATABASE_URL: " + e.getMessage());
+                System.err.println("   Falling back to direct transformation");
+                jdbcUrl = "jdbc:" + databaseUrl;
+            }
         }
 
         return DataSourceBuilder.create()
-                .url(databaseUrl != null ? databaseUrl : environment.getProperty("spring.datasource.url"))
-                .username(environment.getProperty("DATABASE_USERNAME",
-                        environment.getProperty("spring.datasource.username")))
-                .password(environment.getProperty("DATABASE_PASSWORD",
-                        environment.getProperty("spring.datasource.password")))
+                .url(jdbcUrl != null ? jdbcUrl : environment.getProperty("spring.datasource.url"))
+                .username(username != null ? username
+                        : environment.getProperty("DATABASE_USERNAME",
+                                environment.getProperty("spring.datasource.username")))
+                .password(password != null ? password
+                        : environment.getProperty("DATABASE_PASSWORD",
+                                environment.getProperty("spring.datasource.password")))
                 .driverClassName(environment.getProperty("spring.datasource.driverClassName"))
                 .build();
     }
@@ -79,7 +115,7 @@ public class ApplicationConfig {
             // Validate Database URL
             if (databaseUrl != null && !databaseUrl.trim().isEmpty()) {
                 if (databaseUrl.startsWith("postgresql://")) {
-                    System.out.println("✅ DATABASE_URL: Render PostgreSQL format detected - will transform to JDBC");
+                    System.out.println("✅ DATABASE_URL: Render PostgreSQL format detected - will parse and transform");
                 } else if (databaseUrl.startsWith("jdbc:postgresql://")) {
                     System.out.println("✅ DATABASE_URL: Already in JDBC format");
                 } else {
