@@ -21,7 +21,6 @@ public class ApplicationConfig {
     }
 
     @Bean
-    @ConfigurationProperties("spring.datasource")
     public DataSource dataSource() {
         String databaseUrl = environment.getProperty("DATABASE_URL");
         String jdbcUrl = null;
@@ -37,6 +36,13 @@ public class ApplicationConfig {
                 // Extract components
                 String host = uri.getHost();
                 int port = uri.getPort();
+
+                // Default to PostgreSQL standard port if not specified
+                if (port == -1) {
+                    port = 5432;
+                    System.out.println("🔧 Port not specified in DATABASE_URL, defaulting to 5432");
+                }
+
                 String database = uri.getPath().substring(1); // Remove leading '/'
 
                 // Extract username and password from userInfo
@@ -65,16 +71,43 @@ public class ApplicationConfig {
             }
         }
 
-        return DataSourceBuilder.create()
-                .url(jdbcUrl != null ? jdbcUrl : environment.getProperty("spring.datasource.url"))
-                .username(username != null ? username
-                        : environment.getProperty("DATABASE_USERNAME",
-                                environment.getProperty("spring.datasource.username")))
-                .password(password != null ? password
-                        : environment.getProperty("DATABASE_PASSWORD",
-                                environment.getProperty("spring.datasource.password")))
-                .driverClassName(environment.getProperty("spring.datasource.driverClassName"))
-                .build();
+        DataSourceBuilder<?> builder = DataSourceBuilder.create();
+
+        // Set URL
+        if (jdbcUrl != null) {
+            builder.url(jdbcUrl);
+        } else {
+            builder.url(environment.getProperty("spring.datasource.url"));
+        }
+
+        // Set username
+        if (username != null) {
+            builder.username(username);
+        } else {
+            String envUsername = environment.getProperty("DATABASE_USERNAME");
+            if (envUsername != null) {
+                builder.username(envUsername);
+            } else {
+                builder.username(environment.getProperty("spring.datasource.username"));
+            }
+        }
+
+        // Set password
+        if (password != null) {
+            builder.password(password);
+        } else {
+            String envPassword = environment.getProperty("DATABASE_PASSWORD");
+            if (envPassword != null) {
+                builder.password(envPassword);
+            } else {
+                builder.password(environment.getProperty("spring.datasource.password"));
+            }
+        }
+
+        // Set driver
+        builder.driverClassName(environment.getProperty("spring.datasource.driverClassName", "org.postgresql.Driver"));
+
+        return builder.build();
     }
 
     @EventListener
