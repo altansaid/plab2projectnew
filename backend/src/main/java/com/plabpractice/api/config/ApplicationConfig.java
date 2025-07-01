@@ -1,9 +1,14 @@
 package com.plabpractice.api.config;
 
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.env.Environment;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.jdbc.DataSourceBuilder;
+
+import javax.sql.DataSource;
 
 @Configuration
 public class ApplicationConfig {
@@ -12,6 +17,28 @@ public class ApplicationConfig {
 
     public ApplicationConfig(Environment environment) {
         this.environment = environment;
+    }
+
+    @Bean
+    @ConfigurationProperties("spring.datasource")
+    public DataSource dataSource() {
+        String databaseUrl = environment.getProperty("DATABASE_URL");
+
+        // Transform Render's postgresql:// URL to JDBC format
+        if (databaseUrl != null && databaseUrl.startsWith("postgresql://")) {
+            databaseUrl = "jdbc:" + databaseUrl;
+            System.out.println("🔄 Transformed DATABASE_URL for JDBC: "
+                    + databaseUrl.substring(0, Math.min(50, databaseUrl.length())) + "...");
+        }
+
+        return DataSourceBuilder.create()
+                .url(databaseUrl != null ? databaseUrl : environment.getProperty("spring.datasource.url"))
+                .username(environment.getProperty("DATABASE_USERNAME",
+                        environment.getProperty("spring.datasource.username")))
+                .password(environment.getProperty("DATABASE_PASSWORD",
+                        environment.getProperty("spring.datasource.password")))
+                .driverClassName(environment.getProperty("spring.datasource.driverClassName"))
+                .build();
     }
 
     @EventListener
@@ -25,7 +52,8 @@ public class ApplicationConfig {
 
             String jwtSecret = environment.getProperty("jwt.secret", "");
             String allowedOrigins = environment.getProperty("cors.allowed-origins", "");
-            String databaseUrl = environment.getProperty("spring.datasource.url", "");
+            String databaseUrl = environment.getProperty("DATABASE_URL");
+            String fallbackUrl = environment.getProperty("spring.datasource.url", "");
             String activeProfile = environment.getProperty("spring.profiles.active", "default");
 
             System.out.println("🚀 Active Profile: " + activeProfile);
@@ -49,10 +77,19 @@ public class ApplicationConfig {
             }
 
             // Validate Database URL
-            if (databaseUrl == null || databaseUrl.trim().isEmpty()) {
-                System.out.println("⚠️  DATABASE_URL not set, using application defaults");
+            if (databaseUrl != null && !databaseUrl.trim().isEmpty()) {
+                if (databaseUrl.startsWith("postgresql://")) {
+                    System.out.println("✅ DATABASE_URL: Render PostgreSQL format detected - will transform to JDBC");
+                } else if (databaseUrl.startsWith("jdbc:postgresql://")) {
+                    System.out.println("✅ DATABASE_URL: Already in JDBC format");
+                } else {
+                    System.out.println(
+                            "✅ DATABASE_URL: " + (databaseUrl.contains("postgresql") ? "PostgreSQL" : "Other"));
+                }
+            } else if (fallbackUrl != null && !fallbackUrl.trim().isEmpty()) {
+                System.out.println("✅ Database URL: Using fallback from application properties");
             } else {
-                System.out.println("✅ Database URL: " + (databaseUrl.contains("postgresql") ? "PostgreSQL" : "Other"));
+                System.out.println("⚠️  No DATABASE_URL found, using application defaults");
             }
 
             System.out.println("=== Configuration Validation Complete ===");
