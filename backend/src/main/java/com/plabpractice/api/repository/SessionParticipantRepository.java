@@ -17,7 +17,16 @@ public interface SessionParticipantRepository extends JpaRepository<SessionParti
     @Query("SELECT sp FROM SessionParticipant sp JOIN FETCH sp.user WHERE sp.session.id = :sessionId")
     List<SessionParticipant> findBySessionIdWithUser(@Param("sessionId") Long sessionId);
 
+    // Active participants only
+    List<SessionParticipant> findBySessionIdAndIsActive(Long sessionId, Boolean isActive);
+
+    @Query("SELECT sp FROM SessionParticipant sp JOIN FETCH sp.user WHERE sp.session.id = :sessionId AND sp.isActive = :isActive")
+    List<SessionParticipant> findBySessionIdAndIsActiveWithUser(@Param("sessionId") Long sessionId,
+            @Param("isActive") Boolean isActive);
+
     List<SessionParticipant> findByUserId(Long userId);
+
+    List<SessionParticipant> findByUserIdAndIsActive(Long userId, Boolean isActive);
 
     Optional<SessionParticipant> findBySessionIdAndUserId(Long sessionId, Long userId);
 
@@ -29,5 +38,9 @@ public interface SessionParticipantRepository extends JpaRepository<SessionParti
 
     boolean existsBySessionIdAndUserId(Long sessionId, Long userId);
 
+    boolean existsBySessionIdAndUserIdAndIsActive(Long sessionId, Long userId, Boolean isActive);
+
     long countBySessionId(Long sessionId);
+
+    long countBySessionIdAndIsActive(Long sessionId, Boolean isActive);
 }

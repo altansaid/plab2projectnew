@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# PostgreSQL connection details
-DB_NAME="plab2_practice"
-DB_USER="postgres"
-DB_PASSWORD="postgres"
+# PostgreSQL connection details - Updated to match application-dev.properties
+DB_NAME="plabdb"
+DB_USER="plabuser"
+DB_PASSWORD="plab_secure_password_2024!"
 
 # Create database if it doesn't exist
 psql -U postgres -c "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" | grep -q 1 || psql -U postgres -c "CREATE DATABASE $DB_NAME"

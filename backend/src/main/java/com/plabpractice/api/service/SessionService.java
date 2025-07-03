@@ -9,6 +9,7 @@ import com.plabpractice.api.model.Case;
 import com.plabpractice.api.model.Session;
 import com.plabpractice.api.model.SessionParticipant;
 import com.plabpractice.api.model.User;
+import com.plabpractice.api.repository.CaseRepository;
 import com.plabpractice.api.repository.SessionRepository;
 import com.plabpractice.api.repository.SessionParticipantRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -32,6 +34,9 @@ public class SessionService {
 
     @Autowired
     private SessionParticipantRepository sessionParticipantRepository;
+
+    @Autowired
+    private CaseRepository caseRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -62,12 +67,22 @@ public class SessionService {
         if (sessionOpt.isPresent()) {
             Session session = sessionOpt.get();
 
-            // Check if user is already in session
-            if (!sessionParticipantRepository.existsBySessionIdAndUserId(session.getId(), user.getId())) {
+            // Check if user has an existing participant record (active or inactive)
+            Optional<SessionParticipant> existingParticipant = sessionParticipantRepository
+                    .findBySessionIdAndUserId(session.getId(), user.getId());
+
+            if (existingParticipant.isPresent()) {
+                // Reactivate existing participant
+                SessionParticipant participant = existingParticipant.get();
+                participant.setIsActive(true);
+                sessionParticipantRepository.save(participant);
+            } else {
+                // Create new participant
                 SessionParticipant participant = new SessionParticipant();
                 participant.setSession(session);
                 participant.setUser(user);
                 participant.setRole(SessionParticipant.Role.PARTICIPANT);
+                participant.setIsActive(true);
                 sessionParticipantRepository.save(participant);
             }
         }
@@ -100,9 +115,10 @@ public class SessionService {
 
     @Transactional(readOnly = true)
     public List<SessionParticipantDTO> getSessionParticipantDTOs(Long sessionId) {
-        // Use optimized query to prevent N+1 issue
-        List<SessionParticipant> participants = sessionParticipantRepository.findBySessionIdWithUser(sessionId);
-        return participants.stream()
+        // Use optimized query to get only ACTIVE participants
+        List<SessionParticipant> activeParticipants = sessionParticipantRepository
+                .findBySessionIdAndIsActiveWithUser(sessionId, true);
+        return activeParticipants.stream()
                 .map(participant -> {
                     SessionParticipantDTO dto = new SessionParticipantDTO();
                     dto.setId(participant.getId());
@@ -173,8 +189,10 @@ public class SessionService {
     }
 
     public List<String> getAvailableRoles(Session session) {
-        List<SessionParticipant> participants = sessionParticipantRepository.findBySessionId(session.getId());
-        List<SessionParticipant.Role> takenRoles = participants.stream()
+        // Only check ACTIVE participants
+        List<SessionParticipant> activeParticipants = sessionParticipantRepository
+                .findBySessionIdAndIsActive(session.getId(), true);
+        List<SessionParticipant.Role> takenRoles = activeParticipants.stream()
                 .map(SessionParticipant::getRole)
                 .toList();
 
@@ -208,20 +226,23 @@ public class SessionService {
             throw new RuntimeException("Only the session host can be assigned the Doctor role");
         }
 
-        // Check if user is already in session
+        // Check if user has an existing participant record (active or inactive)
         Optional<SessionParticipant> existingParticipant = sessionParticipantRepository
                 .findBySessionIdAndUserId(session.getId(), user.getId());
 
         if (existingParticipant.isPresent()) {
-            // User is already in session, update their role if different
+            // User has an existing record - reactivate and update role if needed
             SessionParticipant participant = existingParticipant.get();
+            participant.setIsActive(true);
+
             if (!participant.getRole().toString().equals(upperRole)) {
                 // Prevent changing to DOCTOR role if not host
                 if (upperRole.equals("DOCTOR") && !isUserHost(sessionCode, user)) {
                     throw new RuntimeException("Only the session host can be assigned the Doctor role");
                 }
 
-                // Check if new role is available (except for Observer)
+                // Check if new role is available (except for Observer) - only check among
+                // ACTIVE participants
                 if (!upperRole.equals("OBSERVER")) {
                     List<String> availableRoles = getAvailableRoles(session);
                     if (!availableRoles.contains(upperRole)) {
@@ -230,8 +251,8 @@ public class SessionService {
                     }
                 }
                 participant.setRole(SessionParticipant.Role.valueOf(upperRole));
-                sessionParticipantRepository.save(participant);
             }
+            sessionParticipantRepository.save(participant);
         } else {
             // New user joining session
             // Prevent new users from selecting DOCTOR role
@@ -253,6 +274,7 @@ public class SessionService {
             participant.setSession(session);
             participant.setUser(user);
             participant.setRole(SessionParticipant.Role.valueOf(upperRole));
+            participant.setIsActive(true);
             sessionParticipantRepository.save(participant);
         }
 
@@ -385,7 +407,186 @@ public class SessionService {
 
         Session session = sessionOpt.get();
         SessionParticipant participant = getParticipantByUserAndSession(user, session);
-        return participant != null ? participant.getRole() : null;
+        // Only return role if participant is active
+        return (participant != null && participant.getIsActive()) ? participant.getRole() : null;
+    }
+
+    @Transactional
+    public List<Session> leaveUserFromOtherActiveSessions(String currentSessionCode, User user) {
+        // Get user's ACTIVE participations only
+        List<SessionParticipant> userActiveParticipations = sessionParticipantRepository
+                .findByUserIdAndIsActive(user.getId(), true);
+        List<Session> otherActiveSessions = userActiveParticipations.stream()
+                .map(SessionParticipant::getSession)
+                .filter(session -> session.getStatus() == Session.Status.CREATED ||
+                        session.getStatus() == Session.Status.IN_PROGRESS)
+                .filter(session -> !session.getCode().equals(currentSessionCode)) // Exclude current session
+                .toList();
+
+        // Deactivate user from other active sessions (instead of deleting)
+        List<Session> leftSessions = new ArrayList<>();
+        for (Session session : otherActiveSessions) {
+            Optional<SessionParticipant> participant = sessionParticipantRepository
+                    .findBySessionIdAndUserId(session.getId(), user.getId());
+
+            if (participant.isPresent() && participant.get().getIsActive()) {
+                // Mark as inactive instead of deleting
+                participant.get().setIsActive(false);
+                sessionParticipantRepository.save(participant.get());
+                leftSessions.add(session);
+                System.out.println("Auto-deactivated user " + user.getName() +
+                        " from session " + session.getCode() +
+                        " because they joined session " + currentSessionCode);
+            }
+        }
+
+        return leftSessions;
+    }
+
+    /**
+     * Start a phase and record the start time
+     */
+    public void startPhase(Session session, Session.Phase phase) {
+        session.setPhase(phase);
+        session.setPhaseStartTime(LocalDateTime.now());
+
+        // Set initial time remaining based on phase
+        int totalTimeSeconds = 0;
+        switch (phase) {
+            case READING:
+                totalTimeSeconds = session.getReadingTime() * 60;
+                break;
+            case CONSULTATION:
+                totalTimeSeconds = session.getConsultationTime() * 60;
+                break;
+            default:
+                totalTimeSeconds = 0;
+        }
+        session.setTimeRemaining(totalTimeSeconds);
+
+        sessionRepository.save(session);
+    }
+
+    /**
+     * Calculate remaining time for current phase
+     */
+    public int calculateRemainingTime(Session session) {
+        if (session.getPhaseStartTime() == null) {
+            return session.getTimeRemaining();
+        }
+
+        // Calculate elapsed time since phase started
+        long elapsedSeconds = ChronoUnit.SECONDS.between(session.getPhaseStartTime(), LocalDateTime.now());
+
+        // Get total time for current phase
+        int totalTimeSeconds = 0;
+        switch (session.getPhase()) {
+            case READING:
+                totalTimeSeconds = session.getReadingTime() * 60;
+                break;
+            case CONSULTATION:
+                totalTimeSeconds = session.getConsultationTime() * 60;
+                break;
+            default:
+                return 0; // No timer for other phases
+        }
+
+        // Calculate remaining time
+        int remainingSeconds = Math.max(0, totalTimeSeconds - (int) elapsedSeconds);
+
+        return remainingSeconds;
+    }
+
+    /**
+     * Update session with current remaining time
+     */
+    public void updateSessionTimerInfo(Session session) {
+        int remainingTime = calculateRemainingTime(session);
+        session.setTimeRemaining(remainingTime);
+        sessionRepository.save(session);
+    }
+
+    /**
+     * Get session with updated timer information
+     */
+    public Session getSessionWithTimerInfo(String sessionCode) {
+        Optional<Session> sessionOpt = findSessionByCode(sessionCode);
+        if (sessionOpt.isPresent()) {
+            Session session = sessionOpt.get();
+            updateSessionTimerInfo(session);
+            return session;
+        }
+        return null;
+    }
+
+    @Transactional
+    public void markUserSessionCompleted(String sessionCode, User user) {
+        Optional<Session> sessionOpt = findSessionByCode(sessionCode);
+        if (!sessionOpt.isPresent()) {
+            throw new RuntimeException("Session not found");
+        }
+
+        Session session = sessionOpt.get();
+        Optional<SessionParticipant> participantOpt = sessionParticipantRepository
+                .findBySessionIdAndUserId(session.getId(), user.getId());
+
+        if (!participantOpt.isPresent()) {
+            throw new RuntimeException("User is not a participant in this session");
+        }
+
+        SessionParticipant participant = participantOpt.get();
+        participant.setHasCompleted(true);
+        sessionParticipantRepository.save(participant);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean areAllUsersCompleted(String sessionCode) {
+        Optional<Session> sessionOpt = findSessionByCode(sessionCode);
+        if (!sessionOpt.isPresent()) {
+            return false;
+        }
+
+        Session session = sessionOpt.get();
+        List<SessionParticipant> activeParticipants = sessionParticipantRepository
+                .findBySessionIdAndIsActive(session.getId(), true);
+
+        // Check if all active participants have completed their sessions
+        return activeParticipants.stream()
+                .allMatch(SessionParticipant::getHasCompleted);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasUserCompleted(String sessionCode, User user) {
+        Optional<Session> sessionOpt = findSessionByCode(sessionCode);
+        if (!sessionOpt.isPresent()) {
+            return false;
+        }
+
+        Session session = sessionOpt.get();
+        Optional<SessionParticipant> participantOpt = sessionParticipantRepository
+                .findBySessionIdAndUserId(session.getId(), user.getId());
+
+        return participantOpt.map(SessionParticipant::getHasCompleted).orElse(false);
+    }
+
+    @Transactional
+    public void markUserFeedbackGiven(String sessionCode, User user) {
+        Optional<Session> sessionOpt = findSessionByCode(sessionCode);
+        if (!sessionOpt.isPresent()) {
+            throw new RuntimeException("Session not found");
+        }
+
+        Session session = sessionOpt.get();
+        Optional<SessionParticipant> participantOpt = sessionParticipantRepository
+                .findBySessionIdAndUserId(session.getId(), user.getId());
+
+        if (!participantOpt.isPresent()) {
+            throw new RuntimeException("User is not a participant in this session");
+        }
+
+        SessionParticipant participant = participantOpt.get();
+        participant.setHasGivenFeedback(true);
+        sessionParticipantRepository.save(participant);
     }
 
     private String generateSessionCode() {
@@ -395,5 +596,40 @@ public class SessionService {
             code = String.format("%06d", random.nextInt(999999));
         } while (sessionRepository.findByCode(code).isPresent());
         return code;
+    }
+
+    public Case getRandomCase(List<String> topics) {
+        if (topics.isEmpty() || topics.contains("Random")) {
+            // Get total count of cases
+            long totalCases = caseRepository.count();
+            if (totalCases == 0) {
+                throw new RuntimeException("No cases available");
+            }
+
+            // Get a random case
+            long randomId = new Random().nextLong(totalCases);
+            return caseRepository.findAll().get((int) randomId);
+        } else {
+            // Get cases by topics
+            List<Case> cases = caseRepository.findByAnyTopicIn(topics);
+            if (cases.isEmpty()) {
+                throw new RuntimeException("No cases available for selected topics");
+            }
+
+            // Get a random case from the filtered list
+            return cases.get(new Random().nextInt(cases.size()));
+        }
+    }
+
+    public void resetParticipantStatus(String sessionCode) {
+        Session session = findSessionByCode(sessionCode)
+                .orElseThrow(() -> new RuntimeException("Session not found"));
+
+        List<SessionParticipant> participants = sessionParticipantRepository.findBySessionId(session.getId());
+        for (SessionParticipant participant : participants) {
+            participant.setHasCompleted(false);
+            participant.setHasGivenFeedback(false);
+            sessionParticipantRepository.save(participant);
+        }
     }
 }

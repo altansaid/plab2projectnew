@@ -17,12 +17,12 @@ public interface FeedbackRepository extends JpaRepository<Feedback, Long> {
 
     List<Feedback> findBySessionIdAndSenderId(Long sessionId, Long senderId);
 
-    @Query("SELECT AVG(f.score) FROM Feedback f WHERE f.session.id = :sessionId")
+    @Query("SELECT AVG(f.overallPerformance) FROM Feedback f WHERE f.session.id = :sessionId")
     Double getAverageScoreBySessionId(Long sessionId);
 
-    @Query("SELECT AVG(f.score) FROM Feedback f WHERE f.sender.id = :senderId")
+    @Query("SELECT AVG(f.overallPerformance) FROM Feedback f WHERE f.sender.id = :senderId")
     Double getAverageScoreBySenderId(Long senderId);
 
-    @Query("SELECT AVG(f.score) FROM Feedback f WHERE f.recipient.id = :recipientId")
+    @Query("SELECT AVG(f.overallPerformance) FROM Feedback f WHERE f.recipient.id = :recipientId")
     Double getAverageScoreByRecipientId(Long recipientId);
 }

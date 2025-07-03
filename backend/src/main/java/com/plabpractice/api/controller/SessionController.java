@@ -10,6 +10,7 @@ import com.plabpractice.api.repository.SessionRepository;
 import com.plabpractice.api.repository.UserRepository;
 import com.plabpractice.api.repository.CategoryRepository;
 import com.plabpractice.api.repository.CaseRepository;
+import com.plabpractice.api.repository.SessionParticipantRepository;
 import com.plabpractice.api.service.SessionService;
 import com.plabpractice.api.service.SessionWebSocketService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,6 +50,9 @@ public class SessionController {
     private UserRepository userRepository;
 
     @Autowired
+    private SessionParticipantRepository sessionParticipantRepository;
+
+    @Autowired
     private SimpMessagingTemplate messagingTemplate;
 
     @Autowired
@@ -72,9 +76,18 @@ public class SessionController {
             Session session = sessionService.createSessionWithConfig(title, sessionType, readingTime,
                     consultationTime, timingType, selectedTopics, user);
 
+            // Auto-leave user from other active sessions after creating new session
+            List<Session> leftSessions = sessionService.leaveUserFromOtherActiveSessions(session.getCode(), user);
+
+            // Notify other sessions about user leaving
+            for (Session leftSession : leftSessions) {
+                webSocketService.handleUserLeave(leftSession.getCode(), user);
+            }
+
             Map<String, Object> response = new HashMap<>();
             response.put("sessionCode", session.getCode());
             response.put("session", session);
+            response.put("leftFromSessions", leftSessions.size()); // Optional: inform how many sessions were left
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -92,9 +105,18 @@ public class SessionController {
 
             Session session = sessionService.createSession(request.getTitle(), user);
 
+            // Auto-leave user from other active sessions after creating new session
+            List<Session> leftSessions = sessionService.leaveUserFromOtherActiveSessions(session.getCode(), user);
+
+            // Notify other sessions about user leaving
+            for (Session leftSession : leftSessions) {
+                webSocketService.handleUserLeave(leftSession.getCode(), user);
+            }
+
             Map<String, Object> response = new HashMap<>();
             response.put("sessionCode", session.getCode());
             response.put("session", session);
+            response.put("leftFromSessions", leftSessions.size()); // Optional: inform how many sessions were left
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -154,7 +176,19 @@ public class SessionController {
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
             String role = roleData.get("role");
+
+            // Auto-leave user from other active sessions before joining this one
+            List<Session> leftSessions = sessionService.leaveUserFromOtherActiveSessions(sessionCode, user);
+
+            // Notify other sessions about user leaving
+            for (Session leftSession : leftSessions) {
+                webSocketService.handleUserLeave(leftSession.getCode(), user);
+            }
+
             Session session = sessionService.joinSessionWithRole(sessionCode, role, user);
+
+            // Start user activity tracking
+            webSocketService.startUserActivityTracking(sessionCode, user.getId());
 
             // Broadcast participant update to all session participants
             webSocketService.broadcastParticipantUpdate(sessionCode);
@@ -173,6 +207,7 @@ public class SessionController {
             response.put("message", "Successfully joined session with role: " + role);
             response.put("userRole", userRole != null ? userRole.toString() : null);
             response.put("isHost", isHost);
+            response.put("leftFromSessions", leftSessions.size()); // Optional: inform how many sessions were left
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -236,21 +271,30 @@ public class SessionController {
             User user = userRepository.findByEmail(auth.getName())
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
-            // Check if session can be started
-            if (!webSocketService.canStartSession(sessionCode)) {
-                Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("error",
-                        "Session cannot be started. Need at least a Doctor and one other participant.");
-                return ResponseEntity.badRequest().body(errorResponse);
+            // Verify user is host
+            if (!sessionService.isUserHost(sessionCode, user)) {
+                throw new RuntimeException("Only the host can start the session");
             }
 
+            // Get session and verify it exists
+            Session session = sessionService.findSessionByCode(sessionCode)
+                    .orElseThrow(() -> new RuntimeException("Session not found"));
+
             // Start the session by transitioning to reading phase
-            webSocketService.broadcastPhaseChange(sessionCode, Session.Phase.READING);
+            session.setPhase(Session.Phase.READING);
+            session.setStatus(Session.Status.IN_PROGRESS);
+            session.setStartTime(LocalDateTime.now());
+            sessionRepository.save(session);
+
+            // Broadcast session update to all participants
+            webSocketService.broadcastSessionUpdate(sessionCode);
+
+            // Start the timer and broadcast phase change
+            webSocketService.broadcastPhaseChange(sessionCode, Session.Phase.READING.toString(),
+                    session.getReadingTime() * 60, System.currentTimeMillis());
             webSocketService.startTimer(sessionCode);
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("message", "Session started successfully");
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok().build();
         } catch (Exception e) {
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("error", "Failed to start session: " + e.getMessage());
@@ -276,11 +320,119 @@ public class SessionController {
         }
     }
 
+    @PostMapping("/{sessionCode}/new-case")
+    public ResponseEntity<?> requestNewCase(@PathVariable String sessionCode, Authentication auth) {
+        try {
+            User user = userRepository.findByEmail(auth.getName())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            // Verify user is in session and has doctor role
+            SessionParticipant.Role userRole = sessionService.getUserRoleInSession(sessionCode, user);
+            if (userRole != SessionParticipant.Role.DOCTOR) {
+                throw new RuntimeException("Only the doctor can request a new case");
+            }
+
+            // Get session and verify it exists
+            Session session = sessionService.findSessionByCode(sessionCode)
+                    .orElseThrow(() -> new RuntimeException("Session not found"));
+
+            // Get a new random case based on session topics
+            List<String> topics = session.getSelectedTopics() != null ? List.of(session.getSelectedTopics().split(","))
+                    : List.of("Random");
+            Case newCase = sessionService.getRandomCase(topics);
+
+            // Update session with new case
+            session.setSelectedCase(newCase);
+            session.setPhase(Session.Phase.READING);
+            sessionRepository.save(session);
+
+            // Reset session participants' completion status
+            sessionService.resetParticipantStatus(sessionCode);
+
+            // Notify all participants about the new case and phase change
+            webSocketService.broadcastSessionUpdate(sessionCode);
+            webSocketService.broadcastPhaseChange(sessionCode, Session.Phase.READING.toString(),
+                    session.getReadingTime() * 60, System.currentTimeMillis());
+
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to get new case: " + e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+    }
+
+    @PostMapping("/{sessionCode}/complete")
+    public ResponseEntity<?> completeSession(@PathVariable String sessionCode, Authentication auth) {
+        try {
+            User user = userRepository.findByEmail(auth.getName())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            Optional<Session> sessionOpt = sessionService.findSessionByCode(sessionCode);
+            if (!sessionOpt.isPresent()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Session not found");
+                return ResponseEntity.notFound().build();
+            }
+
+            Session session = sessionOpt.get();
+            boolean isHost = sessionService.isUserHost(sessionCode, user);
+
+            // In feedback phase: everyone (including host) completes individually
+            if (session.getPhase() == Session.Phase.FEEDBACK) {
+                // Check if user is already completed
+                if (sessionService.hasUserCompleted(sessionCode, user)) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("message", "You have already completed your session");
+                    response.put("alreadyCompleted", true);
+                    return ResponseEntity.ok(response);
+                }
+
+                // Mark user as completed (both host and non-host)
+                sessionService.markUserSessionCompleted(sessionCode, user);
+
+                // Notify other participants via WebSocket
+                webSocketService.broadcastParticipantUpdate(sessionCode);
+
+                // Check if all users are completed to end the session
+                if (sessionService.areAllUsersCompleted(sessionCode)) {
+                    webSocketService.endSession(sessionCode, "All participants have completed their sessions");
+                }
+
+                Map<String, Object> response = new HashMap<>();
+                response.put("message", "Your session has been completed successfully");
+                response.put("completed", true);
+                return ResponseEntity.ok(response);
+            } else {
+                // Only host can complete session outside of feedback phase
+                if (!isHost) {
+                    Map<String, Object> errorResponse = new HashMap<>();
+                    errorResponse.put("error",
+                            "Only the session host can complete the session outside of feedback phase");
+                    return ResponseEntity.badRequest().body(errorResponse);
+                }
+
+                // Host ends the entire session
+                webSocketService.endSession(sessionCode, "Session completed by host");
+                Map<String, Object> response = new HashMap<>();
+                response.put("message", "Session completed successfully");
+                return ResponseEntity.ok(response);
+            }
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to complete session: " + e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+    }
+
     @PostMapping("/{sessionCode}/leave")
     public ResponseEntity<?> leaveSession(@PathVariable String sessionCode, Authentication auth) {
         try {
             User user = userRepository.findByEmail(auth.getName())
                     .orElseThrow(() -> new RuntimeException("User not found"));
+
+            // Stop user activity tracking
+            webSocketService.stopUserActivityTracking(sessionCode, user.getId());
 
             webSocketService.handleUserLeave(sessionCode, user);
 
@@ -305,6 +457,10 @@ public class SessionController {
             }
 
             Session session = sessionOpt.get();
+
+            // Update timer information to get current remaining time
+            sessionService.updateSessionTimerInfo(session);
+
             Map<String, Object> response = new HashMap<>();
 
             // Fetch participants as DTOs to avoid lazy loading issues
@@ -321,23 +477,58 @@ public class SessionController {
             response.put("timingType", session.getTimingType());
             response.put("sessionType", session.getSessionType());
             response.put("selectedTopics", session.getSelectedTopics());
-            response.put("selectedCase", session.getSelectedCase());
+            // Include user role information if authenticated
+            SessionParticipant.Role userRole = null;
+            if (auth != null) {
+                User user = userRepository.findByEmail(auth.getName()).orElse(null);
+                if (user != null) {
+                    userRole = sessionService.getUserRoleInSession(sessionCode, user);
+                    boolean isHost = sessionService.isUserHost(sessionCode, user);
+                    response.put("userRole", userRole != null ? userRole.toString() : null);
+                    response.put("isHost", isHost);
+
+                    // Start/refresh user activity tracking if user is in this session
+                    if (userRole != null) {
+                        webSocketService.trackUserActivity(sessionCode, user.getId());
+                    }
+                }
+            }
+
+            // Filter selectedCase based on user role - hide case title from doctors
+            Case selectedCase = session.getSelectedCase();
+            if (selectedCase != null) {
+                if (userRole == SessionParticipant.Role.DOCTOR) {
+                    // Create a filtered version of the case for doctors without the title
+                    Map<String, Object> filteredCase = new HashMap<>();
+                    filteredCase.put("id", selectedCase.getId());
+                    // Don't include title for doctors
+                    filteredCase.put("description", selectedCase.getDescription());
+                    filteredCase.put("scenario", selectedCase.getScenario());
+                    filteredCase.put("doctorRole", selectedCase.getDoctorRole());
+                    filteredCase.put("patientRole", selectedCase.getPatientRole());
+                    filteredCase.put("doctorNotes", selectedCase.getDoctorNotes());
+                    filteredCase.put("patientNotes", selectedCase.getPatientNotes());
+                    filteredCase.put("observerNotes", selectedCase.getObserverNotes());
+                    filteredCase.put("imageUrl", selectedCase.getImageUrl());
+                    filteredCase.put("category", selectedCase.getCategory());
+                    filteredCase.put("difficulty", selectedCase.getDifficulty());
+                    filteredCase.put("duration", selectedCase.getDuration());
+                    filteredCase.put("sections", selectedCase.getSections());
+                    filteredCase.put("feedbackCriteria", selectedCase.getFeedbackCriteria());
+                    response.put("selectedCase", filteredCase);
+                } else {
+                    // For non-doctor roles, include the full case with title
+                    response.put("selectedCase", selectedCase);
+                }
+            } else {
+                response.put("selectedCase", null);
+            }
+
             response.put("timeRemaining", session.getTimeRemaining());
             response.put("participants", participantDTOs);
             response.put("createdAt", session.getCreatedAt());
             response.put("startTime", session.getStartTime());
             response.put("endTime", session.getEndTime());
-
-            // Include user role information if authenticated
-            if (auth != null) {
-                User user = userRepository.findByEmail(auth.getName()).orElse(null);
-                if (user != null) {
-                    SessionParticipant.Role userRole = sessionService.getUserRoleInSession(sessionCode, user);
-                    boolean isHost = sessionService.isUserHost(sessionCode, user);
-                    response.put("userRole", userRole != null ? userRole.toString() : null);
-                    response.put("isHost", isHost);
-                }
-            }
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -352,6 +543,14 @@ public class SessionController {
         try {
             User user = userRepository.findByEmail(auth.getName())
                     .orElseThrow(() -> new RuntimeException("User not found"));
+
+            // Auto-leave user from other active sessions before joining this one
+            List<Session> leftSessions = sessionService.leaveUserFromOtherActiveSessions(sessionCode, user);
+
+            // Notify other sessions about user leaving
+            for (Session leftSession : leftSessions) {
+                webSocketService.handleUserLeave(leftSession.getCode(), user);
+            }
 
             Optional<Session> sessionOpt = sessionService.joinSession(sessionCode, user);
             if (sessionOpt.isEmpty()) {
@@ -369,6 +568,7 @@ public class SessionController {
             response.put("session", session);
             response.put("participants", participantDTOs);
             response.put("message", "Successfully joined session");
+            response.put("leftFromSessions", leftSessions.size()); // Optional: inform how many sessions were left
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -423,6 +623,54 @@ public class SessionController {
         } catch (Exception e) {
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("error", "Failed to fetch session history: " + e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+    }
+
+    @GetMapping("/user/active")
+    public ResponseEntity<?> getUserActiveSessions(Authentication auth) {
+        try {
+            User user = userRepository.findByEmail(auth.getName())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            // Get user's active sessions (CREATED or IN_PROGRESS)
+            List<SessionParticipant> userParticipations = sessionParticipantRepository.findByUserId(user.getId());
+            List<Session> activeSessions = userParticipations.stream()
+                    .map(SessionParticipant::getSession)
+                    .filter(session -> session.getStatus() == Session.Status.CREATED ||
+                            session.getStatus() == Session.Status.IN_PROGRESS)
+                    .toList();
+
+            // Convert to DTOs with user role information
+            List<Map<String, Object>> sessionDTOs = activeSessions.stream()
+                    .map(session -> {
+                        Map<String, Object> sessionData = new HashMap<>();
+                        sessionData.put("id", session.getId());
+                        sessionData.put("title", session.getTitle());
+                        sessionData.put("code", session.getCode());
+                        sessionData.put("status", session.getStatus());
+                        sessionData.put("phase", session.getPhase());
+                        sessionData.put("createdAt", session.getCreatedAt());
+                        sessionData.put("startTime", session.getStartTime());
+
+                        // Add user's role in this session
+                        SessionParticipant.Role userRole = sessionService.getUserRoleInSession(session.getCode(), user);
+                        boolean isHost = sessionService.isUserHost(session.getCode(), user);
+                        sessionData.put("userRole", userRole != null ? userRole.toString() : null);
+                        sessionData.put("isHost", isHost);
+
+                        // Get participant count
+                        int participantCount = sessionService.getSessionParticipants(session.getId()).size();
+                        sessionData.put("participantCount", participantCount);
+
+                        return sessionData;
+                    })
+                    .toList();
+
+            return ResponseEntity.ok(sessionDTOs);
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to fetch user active sessions: " + e.getMessage());
             return ResponseEntity.badRequest().body(errorResponse);
         }
     }

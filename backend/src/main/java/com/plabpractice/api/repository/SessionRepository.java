@@ -14,4 +14,6 @@ public interface SessionRepository extends JpaRepository<Session, Long> {
     List<Session> findByEndTimeIsNull();
 
     List<Session> findByStatus(Session.Status status);
+
+    List<Session> findBySelectedCaseId(Long caseId);
 }

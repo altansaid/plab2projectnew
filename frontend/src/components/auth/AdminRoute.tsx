@@ -1,24 +1,29 @@
 import React from "react";
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { RootState } from "../../store";
 
-const AdminRoute: React.FC = () => {
-  const { user, token, isAuthenticated } = useSelector(
+interface AdminRouteProps {
+  children: React.ReactNode;
+}
+
+const AdminRoute: React.FC<AdminRouteProps> = ({ children }) => {
+  const { user, isAuthenticated } = useSelector(
     (state: RootState) => state.auth
   );
+  const location = useLocation();
 
-  // First check if user is authenticated
-  if (!token || !isAuthenticated || !user) {
-    return <Navigate to="/login" replace />;
+  if (!isAuthenticated) {
+    // Redirect to login with the attempted location
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Then check if user has admin role
-  if (user.role !== "ADMIN") {
+  if (!user || user.role !== "ADMIN") {
+    // Redirect to dashboard if user is not admin
     return <Navigate to="/dashboard" replace />;
   }
 
-  return <Outlet />;
+  return <>{children}</>;
 };
 
 export default AdminRoute;

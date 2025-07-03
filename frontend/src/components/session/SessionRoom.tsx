@@ -7,6 +7,8 @@ import React, {
   useRef,
   memo,
 } from "react";
+import { useTheme } from "@mui/material/styles";
+import { alpha } from "@mui/material/styles";
 
 /*
  * 🔧 PERSISTENT FEEDBACK STATE SOLUTION
@@ -61,6 +63,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  ToggleButton,
+  ToggleButtonGroup,
 } from "@mui/material";
 import {
   ExitToApp as ExitIcon,
@@ -70,6 +74,8 @@ import {
   VolumeUp as AudioIcon,
   PlayArrow as PlayIcon,
   Pause as PauseIcon,
+  Image as ImageIcon,
+  Close as CloseIcon,
 } from "@mui/icons-material";
 import { RootState } from "../../store";
 import { SessionRole } from "../../features/session/sessionSlice";
@@ -81,6 +87,8 @@ import {
   disconnectWebSocket,
   leaveSession,
   submitFeedback,
+  completeSession,
+  requestNewCase,
 } from "../../services/api";
 
 interface SessionData {
@@ -92,6 +100,8 @@ interface SessionData {
     name: string;
     role: SessionRole;
     isOnline: boolean;
+    hasCompleted?: boolean;
+    hasGivenFeedback?: boolean;
   }>;
   // REMOVED: timeRemaining and totalTime - these belong in timerData to prevent re-renders
   config: {
@@ -104,28 +114,53 @@ interface SessionData {
     id: number;
     title: string;
     description: string;
-    scenario: string;
-    doctorRole: string;
-    patientRole: string;
-    doctorNotes: string;
-    patientNotes: string;
+    scenario?: string;
+    doctorRole?: string;
+    patientRole?: string;
+    doctorNotes?: string;
+    patientNotes?: string;
+    observerNotes?: string;
+    imageUrl?: string;
     category: {
       id: number;
       name: string;
     };
-    difficulty: string;
-    duration: number;
+    difficulty?: string;
+    duration?: number;
+    sections?: Array<{
+      id: string;
+      title: string;
+      content: string;
+      order: number;
+    }>;
+    feedbackCriteria?: Array<{
+      id: string;
+      name: string;
+      order: number;
+      hasSubCriteria: boolean;
+      subCriteria: Array<{
+        id: string;
+        name: string;
+        order: number;
+      }>;
+    }>;
   };
 }
 
 // Persistent Feedback State Interface
+interface FeedbackCriteriaScore {
+  criterionId: string;
+  criterionName: string;
+  score: number | null;
+  subScores: Array<{
+    subCriterionId: string;
+    subCriterionName: string;
+    score: number | null;
+  }>;
+}
+
 interface FeedbackState {
-  overallPerformance: string;
-  clinicalKnowledge: string;
-  communicationSkills: string;
-  professionalism: string;
-  timeManagement: string;
-  patientSafety: string;
+  criteriaScores: FeedbackCriteriaScore[];
   additionalComments: string;
 }
 
@@ -243,6 +278,11 @@ const useClientTimer = () => {
       getTotalTime,
       getPhase,
       isActive: timerState.isActive,
+      formatTime: (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, "0")}`;
+      },
     }),
     [
       startClientTimer,
@@ -304,9 +344,9 @@ const StableFeedbackComponent = memo(
     visible = true,
     // STABLE PROPS FROM PARENT - prevent re-renders and focus loss
     feedbackState,
-    rating,
     isSubmitting,
     hasSubmitted,
+    selectedCase,
     onFieldChange, // Single stable handler
     onSubmit, // Single stable submit handler
   }: {
@@ -315,10 +355,26 @@ const StableFeedbackComponent = memo(
     onSubmitSuccess?: () => void;
     visible?: boolean;
     feedbackState: FeedbackState;
-    rating: number;
     isSubmitting: boolean;
     hasSubmitted: boolean;
-    onFieldChange: (fieldName: string, value: string | number) => void;
+    selectedCase?: {
+      feedbackCriteria?: Array<{
+        id: string;
+        name: string;
+        order: number;
+        hasSubCriteria: boolean;
+        subCriteria: Array<{
+          id: string;
+          name: string;
+          order: number;
+        }>;
+      }>;
+    };
+    onFieldChange: (
+      fieldName: string,
+      value: string | number,
+      subFieldId?: string
+    ) => void;
     onSubmit: () => Promise<void>;
   }) => {
     // Debug logging to track component stability
@@ -329,32 +385,113 @@ const StableFeedbackComponent = memo(
       );
     }, [phase]);
 
-    // SINGLE FIELD HANDLER - creates stable onChange functions that never change
-    const createFieldHandler = useCallback(
-      (fieldName: string) => (event: React.ChangeEvent<HTMLInputElement>) => {
-        const value =
-          fieldName === "rating"
-            ? Number(event.target.value)
-            : event.target.value;
-        onFieldChange(fieldName, value);
+    // Note: createCriteriaHandler removed - using direct onFieldChange calls with rating buttons
+
+    // STABLE COMMENT HANDLER
+    const handleCommentChange = useCallback(
+      (event: React.ChangeEvent<HTMLInputElement>) => {
+        onFieldChange("additionalComments", event.target.value);
       },
       [onFieldChange]
     );
 
-    // STABLE FIELD HANDLERS - memoized to prevent recreation and focus loss
-    const fieldHandlers = useMemo(
-      () => ({
-        overallPerformance: createFieldHandler("overallPerformance"),
-        clinicalKnowledge: createFieldHandler("clinicalKnowledge"),
-        communicationSkills: createFieldHandler("communicationSkills"),
-        professionalism: createFieldHandler("professionalism"),
-        timeManagement: createFieldHandler("timeManagement"),
-        patientSafety: createFieldHandler("patientSafety"),
-        additionalComments: createFieldHandler("additionalComments"),
-        rating: createFieldHandler("rating"),
-      }),
-      [createFieldHandler]
-    );
+    // Calculate overall performance from current scores
+    const calculateOverallPerformance = useCallback(() => {
+      if (!feedbackState.criteriaScores.length) return 0;
+
+      let totalScore = 0;
+      let count = 0;
+
+      feedbackState.criteriaScores.forEach((criteria) => {
+        if (criteria.score !== null) {
+          totalScore += criteria.score;
+          count++;
+        } else if (criteria.subScores.length > 0) {
+          const validSubScores = criteria.subScores.filter(
+            (sub) => sub.score !== null
+          );
+          if (validSubScores.length > 0) {
+            const subAverage =
+              validSubScores.reduce((sum, sub) => sum + (sub.score || 0), 0) /
+              validSubScores.length;
+            totalScore += subAverage;
+            count++;
+          }
+        }
+      });
+
+      return count > 0 ? totalScore / count : 0;
+    }, [feedbackState.criteriaScores]);
+
+    // Check if all criteria have scores
+    const isComplete = useCallback(() => {
+      if (!selectedCase?.feedbackCriteria?.length) return false;
+
+      return feedbackState.criteriaScores.every((criteria) => {
+        if (criteria.subScores.length > 0) {
+          return criteria.subScores.every((sub) => sub.score !== null);
+        }
+        return criteria.score !== null;
+      });
+    }, [feedbackState.criteriaScores, selectedCase?.feedbackCriteria]);
+
+    // Rating Button Component
+    const RatingButtons = ({
+      value,
+      onChange,
+      disabled = false,
+      label,
+    }: {
+      value: number | null;
+      onChange: (rating: number) => void;
+      disabled?: boolean;
+      label: string;
+    }) => {
+      const theme = useTheme();
+
+      return (
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            {label}
+          </Typography>
+          <ToggleButtonGroup
+            value={value}
+            exclusive
+            onChange={(_, newValue) => onChange(newValue)}
+            disabled={disabled}
+            sx={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 1,
+              "& .MuiToggleButton-root": {
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: "8px !important",
+                px: 2,
+                py: 1,
+                "&.Mui-selected": {
+                  backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                  color: theme.palette.primary.main,
+                  borderColor: theme.palette.primary.main,
+                  "&:hover": {
+                    backgroundColor: alpha(theme.palette.primary.main, 0.15),
+                  },
+                },
+              },
+            }}
+          >
+            {[1, 2, 3, 4, 5].map((rating) => (
+              <ToggleButton
+                key={rating}
+                value={rating}
+                aria-label={`${rating} stars`}
+              >
+                {rating}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+        </Box>
+      );
+    };
 
     // STABLE SUBMIT HANDLER - wrapped to include onSubmitSuccess callback
     const handleSubmit = useCallback(async () => {
@@ -393,152 +530,202 @@ const StableFeedbackComponent = memo(
         <CardContent>
           <Typography variant="h6" gutterBottom>
             {isConsultationPhase
-              ? "Feedback Notes (Take notes during consultation)"
+              ? "Live Feedback Rating"
               : "Consultation Feedback"}
           </Typography>
 
           {isConsultationPhase && (
             <Alert severity="info" sx={{ mb: 3 }}>
-              You can take notes and prepare your feedback during the
-              consultation. The Submit button will appear once the consultation
-              ends.
+              You can rate in real-time during the consultation. Your ratings
+              are automatically saved. The Submit button will appear once the
+              consultation ends.
             </Alert>
           )}
 
           {isFeedbackPhase && (
             <Alert severity="success" sx={{ mb: 3 }}>
-              Consultation has ended. Please review your notes and submit your
+              Consultation has ended. Please review your ratings and submit your
               feedback.
             </Alert>
           )}
 
-          {/* Overall Rating */}
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle1" gutterBottom>
-              Overall Performance Rating (1-10) {isFeedbackPhase && "*"}
-            </Typography>
+          {/* Overall Performance Display */}
+          {selectedCase?.feedbackCriteria &&
+            selectedCase.feedbackCriteria.length > 0 && (
+              <Box sx={{ mb: 3, p: 2, bgcolor: "#f5f5f5", borderRadius: 1 }}>
+                <Typography variant="h6" gutterBottom>
+                  Overall Performance:{" "}
+                  {calculateOverallPerformance().toFixed(1)}/5.0
+                </Typography>
+                <Typography variant="body2" color="textSecondary">
+                  Automatically calculated from the criteria below
+                </Typography>
+              </Box>
+            )}
+
+          {/* Dynamic Feedback Criteria */}
+          {selectedCase?.feedbackCriteria &&
+          selectedCase.feedbackCriteria.length > 0 ? (
+            <Grid container spacing={3}>
+              {selectedCase.feedbackCriteria
+                .sort((a, b) => a.order - b.order)
+                .map((criterion) => {
+                  const criteriaScore = feedbackState.criteriaScores.find(
+                    (score) => score.criterionId === criterion.id
+                  );
+
+                  return (
+                    <Grid item xs={12} key={criterion.id}>
+                      <Card variant="outlined">
+                        <CardContent>
+                          <Typography variant="h6" gutterBottom>
+                            {criterion.name}
+                          </Typography>
+
+                          {criterion.hasSubCriteria ? (
+                            // Render sub-criteria
+                            <Grid container spacing={2}>
+                              {criterion.subCriteria
+                                .sort((a, b) => a.order - b.order)
+                                .map((subCriterion) => {
+                                  const subScore =
+                                    criteriaScore?.subScores.find(
+                                      (sub) =>
+                                        sub.subCriterionId === subCriterion.id
+                                    );
+
+                                  return (
+                                    <Grid
+                                      item
+                                      xs={12}
+                                      md={6}
+                                      key={subCriterion.id}
+                                    >
+                                      <Box sx={{ mb: 2 }}>
+                                        <RatingButtons
+                                          value={subScore?.score || null}
+                                          onChange={(rating) =>
+                                            onFieldChange(
+                                              criterion.id,
+                                              rating,
+                                              subCriterion.id
+                                            )
+                                          }
+                                          disabled={false}
+                                          label={subCriterion.name}
+                                        />
+                                      </Box>
+                                    </Grid>
+                                  );
+                                })}
+
+                              {criterion.subCriteria.length > 0 && (
+                                <Grid item xs={12}>
+                                  <Box
+                                    sx={{
+                                      mt: 1,
+                                      p: 1,
+                                      bgcolor: "#fff3e0",
+                                      borderRadius: 1,
+                                    }}
+                                  >
+                                    <Typography
+                                      variant="caption"
+                                      color="textSecondary"
+                                    >
+                                      💡 This criterion's score will be
+                                      calculated as the average of its
+                                      sub-criteria
+                                    </Typography>
+                                  </Box>
+                                </Grid>
+                              )}
+                            </Grid>
+                          ) : (
+                            // Direct rating for criterion without sub-criteria
+                            <Box sx={{ mb: 2 }}>
+                              <RatingButtons
+                                value={criteriaScore?.score || null}
+                                onChange={(rating) =>
+                                  onFieldChange(criterion.id, rating)
+                                }
+                                disabled={false}
+                                label="Rating"
+                              />
+                              <Box
+                                sx={{
+                                  mt: 1,
+                                  p: 1,
+                                  bgcolor: "#e8f5e8",
+                                  borderRadius: 1,
+                                }}
+                              >
+                                <Typography
+                                  variant="caption"
+                                  color="textSecondary"
+                                >
+                                  ⭐ Direct 1-5 rating scale
+                                </Typography>
+                              </Box>
+                            </Box>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  );
+                })}
+            </Grid>
+          ) : (
+            <Alert severity="warning" sx={{ mb: 3 }}>
+              No feedback criteria defined for this case. Please contact the
+              administrator.
+            </Alert>
+          )}
+
+          {/* Additional Comments */}
+          <Box sx={{ mt: 3 }}>
             <TextField
-              type="number"
-              value={rating}
-              onChange={fieldHandlers.rating}
-              inputProps={{ min: 1, max: 10 }}
+              label="Additional Comments"
+              multiline
+              rows={4}
+              value={feedbackState.additionalComments}
+              onChange={handleCommentChange}
               fullWidth
               size="small"
-              placeholder="Rate from 1 to 10"
-              disabled={isConsultationPhase}
-              helperText={
-                isConsultationPhase
-                  ? "Rating will be enabled after consultation"
-                  : ""
-              }
+              placeholder="Any additional feedback or suggestions..."
             />
           </Box>
 
-          {/* Detailed Feedback Fields - Using Stable Handlers */}
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={6}>
-              <TextField
-                label="Overall Performance"
-                multiline
-                rows={3}
-                value={feedbackState.overallPerformance}
-                onChange={fieldHandlers.overallPerformance}
-                fullWidth
-                size="small"
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                label="Clinical Knowledge"
-                multiline
-                rows={3}
-                value={feedbackState.clinicalKnowledge}
-                onChange={fieldHandlers.clinicalKnowledge}
-                fullWidth
-                size="small"
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                label="Communication Skills"
-                multiline
-                rows={3}
-                value={feedbackState.communicationSkills}
-                onChange={fieldHandlers.communicationSkills}
-                fullWidth
-                size="small"
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                label="Professionalism"
-                multiline
-                rows={3}
-                value={feedbackState.professionalism}
-                onChange={fieldHandlers.professionalism}
-                fullWidth
-                size="small"
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                label="Time Management"
-                multiline
-                rows={3}
-                value={feedbackState.timeManagement}
-                onChange={fieldHandlers.timeManagement}
-                fullWidth
-                size="small"
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                label="Patient Safety"
-                multiline
-                rows={3}
-                value={feedbackState.patientSafety}
-                onChange={fieldHandlers.patientSafety}
-                fullWidth
-                size="small"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                label="Additional Comments"
-                multiline
-                rows={4}
-                value={feedbackState.additionalComments}
-                onChange={fieldHandlers.additionalComments}
-                fullWidth
-                size="small"
-                placeholder="Any additional feedback or suggestions..."
-              />
-            </Grid>
-          </Grid>
-
           {/* Submit Button - Only show during feedback phase */}
           {isFeedbackPhase && (
-            <Box sx={{ mt: 3, display: "flex", justifyContent: "center" }}>
-              <Button
-                variant="contained"
-                onClick={handleSubmit}
-                disabled={rating === 0 || isSubmitting}
-                size="large"
-              >
-                {isSubmitting ? "Submitting..." : "Submit Feedback"}
-              </Button>
-              {rating === 0 && (
+            <Box
+              sx={{
+                mt: 3,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 2,
+              }}
+            >
+              <Box sx={{ display: "flex", gap: 2 }}>
+                <Button
+                  variant="contained"
+                  onClick={handleSubmit}
+                  disabled={!isComplete() || isSubmitting}
+                  size="large"
+                >
+                  {isSubmitting ? "Submitting..." : "Submit Feedback"}
+                </Button>
+              </Box>
+              {!isComplete() && (
                 <Typography
                   variant="caption"
                   color="error"
                   sx={{
-                    mt: 1,
                     textAlign: "center",
-                    display: "block",
-                    width: "100%",
                   }}
                 >
-                  Please provide a rating before submitting
+                  Please provide ratings for all criteria before submitting
                 </Typography>
               )}
             </Box>
@@ -548,8 +735,9 @@ const StableFeedbackComponent = memo(
           {isConsultationPhase && (
             <Box sx={{ mt: 3, textAlign: "center" }}>
               <Typography variant="body2" color="text.secondary">
-                Keep taking notes during the consultation. Submit button will
-                appear when consultation ends.
+                Rate criteria in real-time during the consultation. Your ratings
+                are automatically saved. Submit button will appear when
+                consultation ends.
               </Typography>
             </Box>
           )}
@@ -566,225 +754,183 @@ interface PatientInformationCardProps {
     id: number;
     title: string;
     description: string;
-    scenario: string;
-    doctorRole: string;
-    patientRole: string;
-    doctorNotes: string;
-    patientNotes: string;
+    scenario?: string;
+    doctorRole?: string;
+    patientRole?: string;
+    doctorNotes?: string;
+    patientNotes?: string;
     observerNotes?: string;
+    imageUrl?: string;
     category: {
       id: number;
       name: string;
     };
-    difficulty: string;
-    duration: number;
+    difficulty?: string;
+    duration?: number;
+    sections?: Array<{
+      id: string;
+      title: string;
+      content: string;
+      order: number;
+    }>;
   } | null;
 }
 
-const PatientInformationCard: React.FC<PatientInformationCardProps> = memo(
-  ({ userRole, selectedCase }) => {
-    const getRoleColor = (role: SessionRole) => {
-      switch (role) {
-        case "doctor":
-          return "#1976d2";
-        case "patient":
-          return "#2e7d32";
-        case "observer":
-          return "#7b1fa2";
-        default:
-          return "#666";
-      }
-    };
+const PatientInformationCard: React.FC<PatientInformationCardProps> = ({
+  userRole,
+  selectedCase,
+}) => {
+  const theme = useTheme();
+  const [showImageModal, setShowImageModal] = useState(false);
 
-    if (!selectedCase) {
-      return (
-        <Card>
-          <CardContent>
+  if (!selectedCase) return null;
+
+  const roleSpecificNotes = {
+    DOCTOR: selectedCase.doctorNotes,
+    PATIENT: selectedCase.patientNotes,
+    OBSERVER: selectedCase.observerNotes,
+  }[userRole];
+
+  return (
+    <Card
+      elevation={0}
+      sx={{
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        backgroundColor: alpha(theme.palette.background.paper, 0.6),
+      }}
+    >
+      <CardContent
+        sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}
+      >
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            mb: 1,
+          }}
+        >
+          <Box>
             <Typography variant="h6" gutterBottom>
-              Patient Information
+              {selectedCase.title}
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              No patient information available
-            </Typography>
-          </CardContent>
-        </Card>
-      );
-    }
-
-    const caseData = selectedCase;
-
-    // Get role-specific information
-    const getPatientScenario = () => {
-      return (
-        caseData.scenario ||
-        caseData.description ||
-        `Patient presenting with ${
-          caseData.title?.toLowerCase() || "medical condition"
-        }`
-      );
-    };
-
-    const getRoleSpecificNotes = () => {
-      switch (userRole) {
-        case "doctor":
-          return caseData.doctorNotes || "No additional doctor notes provided";
-        case "patient":
-          return (
-            caseData.patientNotes || "No additional patient notes provided"
-          );
-        case "observer":
-          return (
-            caseData.observerNotes || "No additional observer notes provided"
-          );
-        default:
-          return "No additional notes provided";
-      }
-    };
-
-    const getRoleSpecificInstructions = () => {
-      switch (userRole) {
-        case "doctor":
-          return (
-            caseData.doctorRole ||
-            "Assess the patient and discuss management with them"
-          );
-        case "patient":
-          return (
-            caseData.patientRole ||
-            "Present your symptoms and respond naturally to the doctor's questions"
-          );
-        case "observer":
-          return "Observe the consultation and take notes on communication skills, clinical approach, and overall consultation flow";
-        default:
-          return "Participate in the consultation session";
-      }
-    };
-
-    return (
-      <Card>
-        <CardContent>
-          <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
-            <Box
-              sx={{
-                width: 12,
-                height: 12,
-                borderRadius: "50%",
-                backgroundColor: getRoleColor(userRole),
-                mr: 2,
-              }}
-            />
-            <Typography variant="h6">
-              {userRole === "doctor"
-                ? "Doctor Information"
-                : userRole === "patient"
-                ? "Patient Information"
-                : "Observer Information"}
-            </Typography>
-          </Box>
-
-          {/* Case Title */}
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
-              Case:
-            </Typography>
-            <Typography
-              variant="body1"
-              sx={{
-                mb: 2,
-                p: 2,
-                backgroundColor: "#e3f2fd",
-                borderRadius: 1,
-                color: "#1565c0",
-                fontWeight: "medium",
-              }}
-            >
-              {caseData.title}
-            </Typography>
-          </Box>
-
-          {/* Patient Scenario */}
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
-              Scenario:
-            </Typography>
-            <Typography
-              variant="body1"
-              sx={{
-                mb: 2,
-                p: 2,
-                backgroundColor: "#f5f5f5",
-                borderRadius: 1,
-              }}
-            >
-              {getPatientScenario()}
-            </Typography>
-          </Box>
-
-          {/* Role-specific notes */}
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
-              {userRole === "doctor"
-                ? "Doctor Notes:"
-                : userRole === "patient"
-                ? "Patient Background:"
-                : "Observer Notes:"}
-            </Typography>
-            <Typography
-              variant="body1"
-              sx={{
-                mb: 2,
-                p: 2,
-                backgroundColor: "#fff3e0",
-                borderRadius: 1,
-              }}
-            >
-              {getRoleSpecificNotes()}
-            </Typography>
-          </Box>
-
-          {/* Role-specific instructions */}
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
-              What you must do:
-            </Typography>
-            <Typography
-              variant="body1"
-              sx={{
-                mb: 2,
-                p: 2,
-                backgroundColor: "#e3f2fd",
-                borderRadius: 1,
-                color: "#1565c0",
-              }}
-            >
-              {getRoleSpecificInstructions()}
-            </Typography>
-          </Box>
-
-          {/* Additional context for Doctor */}
-          {userRole === "doctor" && (
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
-                Setting:
-              </Typography>
-              <Typography
-                variant="body1"
+            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+              <Chip
+                size="small"
+                label={selectedCase.category.name}
                 sx={{
-                  mb: 2,
-                  p: 2,
-                  backgroundColor: "#f5f5f5",
-                  borderRadius: 1,
+                  backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                  color: theme.palette.primary.main,
                 }}
-              >
-                FY2 in GP Surgery
-              </Typography>
+              />
+              {selectedCase.difficulty && (
+                <Chip
+                  size="small"
+                  label={selectedCase.difficulty}
+                  sx={{
+                    backgroundColor: alpha(theme.palette.secondary.main, 0.1),
+                    color: theme.palette.secondary.main,
+                  }}
+                />
+              )}
             </Box>
+          </Box>
+          {selectedCase.imageUrl && (
+            <IconButton
+              onClick={() => setShowImageModal(true)}
+              sx={{
+                backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                "&:hover": {
+                  backgroundColor: alpha(theme.palette.primary.main, 0.2),
+                },
+              }}
+            >
+              <ImageIcon color="primary" />
+            </IconButton>
           )}
-        </CardContent>
-      </Card>
-    );
-  }
-);
+        </Box>
+
+        <Divider />
+
+        <Box>
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            Scenario
+          </Typography>
+          <Typography variant="body2">
+            {selectedCase.scenario || selectedCase.description}
+          </Typography>
+        </Box>
+
+        {roleSpecificNotes && (
+          <Box>
+            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+              {userRole.charAt(0) + userRole.slice(1).toLowerCase()} Notes
+            </Typography>
+            <Typography variant="body2">{roleSpecificNotes}</Typography>
+          </Box>
+        )}
+
+        {selectedCase.sections && selectedCase.sections.length > 0 && (
+          <Box>
+            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+              Additional Information
+            </Typography>
+            {selectedCase.sections
+              .sort((a, b) => a.order - b.order)
+              .map((section) => (
+                <Box key={section.id} sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2">{section.title}</Typography>
+                  <Typography variant="body2">{section.content}</Typography>
+                </Box>
+              ))}
+          </Box>
+        )}
+      </CardContent>
+
+      <Dialog
+        open={showImageModal}
+        onClose={() => setShowImageModal(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            pb: 1,
+          }}
+        >
+          Case Image
+          <IconButton
+            onClick={() => setShowImageModal(false)}
+            size="small"
+            sx={{
+              color: theme.palette.text.secondary,
+              "&:hover": { color: theme.palette.text.primary },
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
+          <Box
+            component="img"
+            src={selectedCase.imageUrl}
+            alt="Case Image"
+            sx={{
+              width: "100%",
+              height: "auto",
+              display: "block",
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+};
 
 // 🔧 MODULE-LEVEL CONSULTATION VIEW - Prevents timer flicker by staying stable across parent re-renders
 interface ConsultationViewProps {
@@ -794,122 +940,141 @@ interface ConsultationViewProps {
     giveFeedback: boolean;
   };
   onGiveFeedback: () => void;
+  showImageModal: boolean;
+  setShowImageModal: (show: boolean) => void;
   selectedCase?: {
     id: number;
     title: string;
     description: string;
-    scenario: string;
-    doctorRole: string;
-    patientRole: string;
-    doctorNotes: string;
-    patientNotes: string;
+    scenario?: string;
+    doctorRole?: string;
+    patientRole?: string;
+    doctorNotes?: string;
+    patientNotes?: string;
     observerNotes?: string;
+    imageUrl?: string;
     category: {
       id: number;
       name: string;
     };
-    difficulty: string;
-    duration: number;
+    difficulty?: string;
+    duration?: number;
+    sections?: Array<{
+      id: string;
+      title: string;
+      content: string;
+      order: number;
+    }>;
   } | null;
 }
 
-const ConsultationView: React.FC<ConsultationViewProps> = memo(
-  ({ userRole, clientTimer, buttonStates, onGiveFeedback, selectedCase }) => {
-    return (
-      <Container maxWidth="lg">
-        <Grid container spacing={3}>
-          {/* Patient Information Card for Patient and Observer */}
-          {(userRole === "patient" || userRole === "observer") && (
-            <Grid item xs={12} md={8}>
-              <PatientInformationCard
-                userRole={userRole}
-                selectedCase={selectedCase}
-              />
-            </Grid>
-          )}
+const ConsultationView: React.FC<ConsultationViewProps> = ({
+  userRole,
+  clientTimer,
+  buttonStates,
+  onGiveFeedback,
+  showImageModal,
+  setShowImageModal,
+  selectedCase,
+}) => {
+  const theme = useTheme();
 
-          {/* Consultation Progress Card */}
-          <Grid item xs={12} md={userRole === "doctor" ? 8 : 4}>
-            <Card>
-              <CardContent>
-                <Typography variant="h5" gutterBottom>
-                  Consultation in Progress
-                </Typography>
-                <Typography variant="body1" paragraph>
-                  The consultation is now taking place. Follow your role
-                  guidelines and participate actively.
-                </Typography>
-
-                {userRole === "doctor" && (
-                  <Alert severity="info" sx={{ mb: 2 }}>
-                    Lead the consultation, ask appropriate questions, and manage
-                    the time effectively.
-                  </Alert>
-                )}
-
-                {userRole === "patient" && (
-                  <Alert severity="info" sx={{ mb: 2 }}>
-                    Role-play as the patient. Respond naturally to the doctor's
-                    questions based on your case information.
-                  </Alert>
-                )}
-
-                {userRole === "observer" && (
-                  <Alert severity="info" sx={{ mb: 2 }}>
-                    Observe the consultation and take notes for your feedback.
-                    Focus on communication skills and clinical approach.
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Timer and Controls Sidebar */}
-          <Grid item xs={12} md={4}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Consultation Timer
-                </Typography>
-                <TimerDisplay clientTimer={clientTimer} />
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ textAlign: "center", mt: 1 }}
-                >
-                  Time remaining for consultation
-                </Typography>
-              </CardContent>
-            </Card>
-
-            {userRole === "doctor" && (
-              <Card sx={{ mt: 2 }}>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    Doctor Controls
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    fullWidth
-                    startIcon={<FeedbackIcon />}
-                    onClick={onGiveFeedback}
-                    disabled={buttonStates.giveFeedback}
-                    sx={{ mb: 1 }}
-                  >
-                    End Consultation
-                  </Button>
-                  <Typography variant="caption" color="text.secondary">
-                    Click to end consultation and move to feedback phase
-                  </Typography>
-                </CardContent>
-              </Card>
-            )}
-          </Grid>
+  return (
+    <Container maxWidth="lg">
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={8}>
+          <PatientInformationCard
+            userRole={userRole}
+            selectedCase={selectedCase}
+          />
         </Grid>
-      </Container>
-    );
-  }
-);
+
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Consultation Phase
+              </Typography>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                The consultation is now in progress
+              </Typography>
+
+              <TimerDisplay clientTimer={clientTimer} />
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mt: 1, textAlign: "center" }}
+              >
+                Time remaining for consultation
+              </Typography>
+            </CardContent>
+          </Card>
+
+          {/* Session Controls */}
+          <Card sx={{ mt: 2 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Session Controls
+              </Typography>
+              {selectedCase?.imageUrl && (
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  startIcon={<ImageIcon />}
+                  onClick={() => setShowImageModal(true)}
+                  sx={{ py: 1.5, mb: 1 }}
+                >
+                  View Patient Image
+                </Button>
+              )}
+              {userRole === "doctor" && (
+                <Button
+                  variant="contained"
+                  fullWidth
+                  startIcon={<FeedbackIcon />}
+                  onClick={onGiveFeedback}
+                  disabled={buttonStates.giveFeedback}
+                  sx={{ py: 1.5 }}
+                >
+                  {buttonStates.giveFeedback ? "Ending..." : "End Consultation"}
+                </Button>
+              )}
+              {userRole === "observer" && (
+                <Button
+                  variant="contained"
+                  fullWidth
+                  startIcon={<FeedbackIcon />}
+                  onClick={onGiveFeedback}
+                  disabled={buttonStates.giveFeedback}
+                  sx={{ py: 1.5 }}
+                >
+                  {buttonStates.giveFeedback ? "Loading..." : "Give Feedback"}
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Role Information */}
+          <Card sx={{ mt: 2 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Your Role
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {userRole === "doctor" &&
+                  "Lead the consultation, manage timing, and provide feedback."}
+                {userRole === "patient" &&
+                  "You will role-play as the patient during the consultation. Follow the scenario and respond naturally."}
+                {userRole === "observer" &&
+                  "Observe the consultation and provide feedback on the doctor's performance."}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+    </Container>
+  );
+};
 
 // MAIN COMPONENT - Client-side timer architecture
 const SessionRoomMain: React.FC = () => {
@@ -918,8 +1083,10 @@ const SessionRoomMain: React.FC = () => {
   const location = useLocation();
   const { user } = useSelector((state: RootState) => state.auth);
 
-  // Get data from previous screens
-  const userRole = location.state?.role as SessionRole;
+  // Get data from previous screens with fallback
+  const [userRole, setUserRole] = useState<SessionRole>(
+    (location.state?.role as SessionRole) || "observer"
+  );
   const isHost = location.state?.isHost as boolean;
   const sessionConfig = location.state?.config;
   const sessionTitle = location.state?.sessionTitle || "Medical Consultation";
@@ -930,34 +1097,85 @@ const SessionRoomMain: React.FC = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [sessionEnded, setSessionEnded] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   // PERSISTENT FEEDBACK STATE - managed here to prevent loss during phase transitions
   const [persistentFeedbackState, setPersistentFeedbackState] =
     useState<FeedbackState>({
-      overallPerformance: "",
-      clinicalKnowledge: "",
-      communicationSkills: "",
-      professionalism: "",
-      timeManagement: "",
-      patientSafety: "",
+      criteriaScores: [],
       additionalComments: "",
     });
-  const [persistentRating, setPersistentRating] = useState(0);
   const [persistentIsSubmitting, setPersistentIsSubmitting] = useState(false);
   const [persistentHasSubmitted, setPersistentHasSubmitted] = useState(false);
 
+  // Initialize feedback criteria scores when session data loads
+  useEffect(() => {
+    if (
+      sessionData?.selectedCase?.feedbackCriteria &&
+      persistentFeedbackState.criteriaScores.length === 0
+    ) {
+      const initialScores: FeedbackCriteriaScore[] =
+        sessionData.selectedCase.feedbackCriteria.map((criterion) => ({
+          criterionId: criterion.id,
+          criterionName: criterion.name,
+          score: criterion.hasSubCriteria ? null : null,
+          subScores: criterion.subCriteria.map((sub) => ({
+            subCriterionId: sub.id,
+            subCriterionName: sub.name,
+            score: null,
+          })),
+        }));
+
+      setPersistentFeedbackState((prev) => ({
+        ...prev,
+        criteriaScores: initialScores,
+      }));
+    }
+  }, [
+    sessionData?.selectedCase?.feedbackCriteria,
+    persistentFeedbackState.criteriaScores.length,
+  ]);
+
   // SINGLE MEMOIZED HANDLER - prevents focus loss by providing stable reference
   const handleFieldChange = useCallback(
-    (fieldName: string, value: string | number) => {
-      console.log(`📝 Field changed: ${fieldName} = ${value}`);
+    (fieldName: string, value: string | number, subFieldId?: string) => {
+      console.log(
+        `📝 Field changed: ${fieldName} = ${value}`,
+        subFieldId ? `(sub: ${subFieldId})` : ""
+      );
 
-      if (fieldName === "rating") {
-        setPersistentRating(value as number);
-      } else {
-        // Handle all feedback text fields
+      if (fieldName === "additionalComments") {
         setPersistentFeedbackState((prev) => ({
           ...prev,
-          [fieldName]: value as string,
+          additionalComments: value as string,
+        }));
+      } else {
+        // Handle criteria scores
+        setPersistentFeedbackState((prev) => ({
+          ...prev,
+          criteriaScores: prev.criteriaScores.map((criteria) => {
+            if (criteria.criterionId === fieldName) {
+              if (subFieldId) {
+                // Update sub-score
+                return {
+                  ...criteria,
+                  subScores: criteria.subScores.map((sub) =>
+                    sub.subCriterionId === subFieldId
+                      ? { ...sub, score: value as number }
+                      : sub
+                  ),
+                };
+              } else {
+                // Update main score
+                return {
+                  ...criteria,
+                  score: value as number,
+                };
+              }
+            }
+            return criteria;
+          }),
         }));
       }
     },
@@ -966,11 +1184,22 @@ const SessionRoomMain: React.FC = () => {
 
   // SUBMISSION HANDLER - also memoized for stability
   const handleFeedbackSubmit = useCallback(async () => {
-    if (
-      persistentIsSubmitting ||
-      persistentHasSubmitted ||
-      persistentRating === 0
-    ) {
+    if (persistentIsSubmitting || persistentHasSubmitted) {
+      return;
+    }
+
+    // Check if all criteria have scores
+    const isComplete = persistentFeedbackState.criteriaScores.every(
+      (criteria) => {
+        if (criteria.subScores.length > 0) {
+          return criteria.subScores.every((sub) => sub.score !== null);
+        }
+        return criteria.score !== null;
+      }
+    );
+
+    if (!isComplete) {
+      console.log("❌ Cannot submit: Not all criteria have scores");
       return;
     }
 
@@ -979,8 +1208,19 @@ const SessionRoomMain: React.FC = () => {
 
     try {
       const feedbackData = {
-        rating: persistentRating,
-        feedback: persistentFeedbackState,
+        comment: persistentFeedbackState.additionalComments,
+        criteriaScores: persistentFeedbackState.criteriaScores.map(
+          (criteria) => ({
+            criterionId: criteria.criterionId,
+            criterionName: criteria.criterionName,
+            score: criteria.score,
+            subScores: criteria.subScores.map((sub) => ({
+              subCriterionId: sub.subCriterionId,
+              subCriterionName: sub.subCriterionName,
+              score: sub.score,
+            })),
+          })
+        ),
       };
 
       console.log("📤 Feedback data being submitted:", feedbackData);
@@ -988,6 +1228,14 @@ const SessionRoomMain: React.FC = () => {
 
       setPersistentHasSubmitted(true);
       console.log("✅ Feedback submitted successfully");
+
+      // Disconnect WebSocket and navigate to dashboard
+      disconnectWebSocket();
+
+      // Small delay to ensure cleanup, then navigate to dashboard
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 500);
     } catch (error) {
       console.error("❌ Failed to submit feedback:", error);
     } finally {
@@ -996,30 +1244,12 @@ const SessionRoomMain: React.FC = () => {
   }, [
     persistentIsSubmitting,
     persistentHasSubmitted,
-    persistentRating,
     persistentFeedbackState,
     sessionCode,
+    navigate,
   ]);
 
-  // STABLE PROPS OBJECT - memoized to prevent unnecessary re-renders
-  const stableFeedbackProps = useMemo(
-    () => ({
-      feedbackState: persistentFeedbackState,
-      rating: persistentRating,
-      isSubmitting: persistentIsSubmitting,
-      hasSubmitted: persistentHasSubmitted,
-      onFieldChange: handleFieldChange,
-      onSubmit: handleFeedbackSubmit,
-    }),
-    [
-      persistentFeedbackState,
-      persistentRating,
-      persistentIsSubmitting,
-      persistentHasSubmitted,
-      handleFieldChange,
-      handleFeedbackSubmit,
-    ]
-  );
+  // Note: stableFeedbackProps will be defined after handleCompleteSession
 
   // Debug: Track feedback state preservation (reduced logging to prevent spam)
   useEffect(() => {
@@ -1027,13 +1257,15 @@ const SessionRoomMain: React.FC = () => {
       console.log("🔄 Main component: Phase changed to", sessionData.phase);
       console.log(
         "💾 Persistent feedback state preserved:",
-        Object.keys(persistentFeedbackState).some(
-          (key) => persistentFeedbackState[key as keyof FeedbackState]
-        )
+        persistentFeedbackState.criteriaScores.length > 0 ||
+          persistentFeedbackState.additionalComments.length > 0
       );
-      console.log("⭐ Persistent rating:", persistentRating);
+      console.log(
+        "📊 Criteria scores count:",
+        persistentFeedbackState.criteriaScores.length
+      );
     }
-  }, [sessionData?.phase]);
+  }, [sessionData?.phase, persistentFeedbackState]);
 
   // CLIENT-SIDE TIMER - No per-second WebSocket updates, no UI re-renders
   const clientTimer = useClientTimer();
@@ -1076,17 +1308,34 @@ const SessionRoomMain: React.FC = () => {
         try {
           const response = await getSessionByCode(sessionCode);
           const session = response.data;
+
+          // Update session data with new phase and case
           setSessionData((prev) =>
             prev
               ? {
                   ...prev,
                   phase: session.phase?.toLowerCase() || prev.phase,
                   participants: session.participants || prev.participants,
+                  selectedCase: session.selectedCase || prev.selectedCase,
                 }
               : null
           );
+
+          // Start timer if in reading phase
+          if (
+            session.phase?.toLowerCase() === "reading" &&
+            session.readingTime
+          ) {
+            console.log("Starting timer from polling response");
+            clientTimer.startClientTimer(
+              session.readingTime * 60,
+              Date.now(),
+              "reading"
+            );
+          }
         } catch (pollError) {
           console.error("Failed to poll session updates:", pollError);
+          setError("Failed to get session updates. Please refresh the page.");
         }
       }, 1000);
     } catch (error: any) {
@@ -1100,7 +1349,7 @@ const SessionRoomMain: React.FC = () => {
       // Reset button loading state
       setButtonStates((prev) => ({ ...prev, startSession: false }));
     }
-  }, [sessionCode, user]);
+  }, [sessionCode, user, clientTimer]);
 
   const handleSkipToConsultation = useCallback(async () => {
     if (!sessionCode || !sessionData) return;
@@ -1120,30 +1369,87 @@ const SessionRoomMain: React.FC = () => {
 
   const handleNewCase = useCallback(async () => {
     if (!sessionData) return;
-    setSessionData((prev) => {
-      if (!prev) return prev;
-      return { ...prev, phase: "reading" };
-    });
-    const durationSeconds = sessionData.config.readingTime * 60;
-    const startTimestamp = Date.now();
-    clientTimer.startClientTimer(durationSeconds, startTimestamp, "reading");
+
+    // Set button loading state
+    setButtonStates((prev) => ({ ...prev, newCase: true }));
+
+    try {
+      console.log("Requesting new case for session:", sessionData.sessionCode);
+      await requestNewCase(sessionData.sessionCode);
+      console.log("New case requested successfully");
+
+      // The WebSocket handler will update the session data with the new case
+      // and trigger the phase change automatically
+    } catch (error: any) {
+      console.error("Failed to request new case:", error);
+      setError(
+        error.response?.data?.error || error.message || "Failed to get new case"
+      );
+    } finally {
+      // Reset button loading state
+      setButtonStates((prev) => ({ ...prev, newCase: false }));
+    }
   }, [sessionData]); // Removed clientTimer dependency to prevent infinite loops
 
   const handleGiveFeedback = useCallback(async () => {
     if (!sessionData) return;
+
+    // Set button loading state
+    setButtonStates((prev) => ({ ...prev, giveFeedback: true }));
+
     try {
       console.log("Doctor ending consultation and moving to feedback phase");
       await skipPhase(sessionData.sessionCode);
       console.log("Successfully transitioned to feedback phase");
+
+      // Stop the consultation timer
+      clientTimer.stopClientTimer();
+
+      // Force update the session phase immediately
+      setSessionData((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          phase: "feedback",
+          participants: [...(prev.participants || [])],
+          config: { ...prev.config },
+          selectedCase: prev.selectedCase ? { ...prev.selectedCase } : null,
+        };
+      });
     } catch (error) {
       console.error("Failed to transition to feedback phase:", error);
+      setError("Failed to transition to feedback phase. Please try again.");
+    } finally {
+      // Reset button loading state
+      setButtonStates((prev) => ({ ...prev, giveFeedback: false }));
     }
-  }, [sessionData]);
+  }, [sessionData, clientTimer]);
 
   const handleSubmitFeedback = useCallback(async () => {
     // This is a placeholder - the actual feedback submission is handled by IndependentFeedbackComponent
     console.log("Submit feedback called from main component");
   }, []);
+
+  // STABLE PROPS OBJECT - memoized to prevent unnecessary re-renders
+  // Defined after handleCompleteSession to avoid hoisting issues
+  const stableFeedbackProps = useMemo(
+    () => ({
+      feedbackState: persistentFeedbackState,
+      isSubmitting: persistentIsSubmitting,
+      hasSubmitted: persistentHasSubmitted,
+      selectedCase: sessionData?.selectedCase,
+      onFieldChange: handleFieldChange,
+      onSubmit: handleFeedbackSubmit,
+    }),
+    [
+      persistentFeedbackState,
+      persistentIsSubmitting,
+      persistentHasSubmitted,
+      sessionData?.selectedCase,
+      handleFieldChange,
+      handleFeedbackSubmit,
+    ]
+  );
 
   const handleExit = useCallback(() => {
     setShowExitDialog(true);
@@ -1153,14 +1459,21 @@ const SessionRoomMain: React.FC = () => {
     setShowExitDialog(false);
     try {
       if (sessionCode) {
-        await leaveSession(sessionCode);
+        if (sessionData?.phase === "feedback") {
+          // Feedback phase'de individual completion yap
+          await completeSession(sessionCode);
+          console.log("Individual session completed via exit");
+        } else {
+          // Diğer phase'lerde normal leave session
+          await leaveSession(sessionCode);
+        }
       }
       disconnectWebSocket();
     } catch (error) {
-      console.error("Error leaving session:", error);
+      console.error("Error exiting session:", error);
     }
     navigate("/dashboard");
-  }, [sessionCode, navigate]);
+  }, [sessionCode, sessionData?.phase, navigate]);
 
   // WebSocket message handlers
   const handleSessionEnded = useCallback(
@@ -1187,6 +1500,15 @@ const SessionRoomMain: React.FC = () => {
 
         console.log("Session data received:", session);
 
+        // Update user role from backend if available
+        if (session.userRole) {
+          const backendRole = session.userRole.toLowerCase() as SessionRole;
+          if (backendRole !== userRole) {
+            console.log("Updating user role from backend:", backendRole);
+            setUserRole(backendRole);
+          }
+        }
+
         const initialSessionData = {
           sessionCode: session.code,
           title: session.title,
@@ -1210,13 +1532,29 @@ const SessionRoomMain: React.FC = () => {
           initialSessionData.phase === "reading" ||
           initialSessionData.phase === "consultation"
         ) {
-          const durationSeconds =
+          const totalDurationSeconds =
             initialSessionData.phase === "reading"
               ? session.readingTime * 60
               : session.consultationTime * 60;
-          const startTimestamp = Date.now();
+
+          // Use backend's timeRemaining if available, otherwise use full duration
+          const remainingSeconds =
+            session.timeRemaining || totalDurationSeconds;
+
+          // Calculate start timestamp based on elapsed time
+          const elapsedSeconds = totalDurationSeconds - remainingSeconds;
+          const startTimestamp = Date.now() - elapsedSeconds * 1000;
+
+          console.log("Resume timer:", {
+            phase: initialSessionData.phase,
+            totalDurationSeconds,
+            remainingSeconds,
+            elapsedSeconds,
+            startTimestamp,
+          });
+
           clientTimer.startClientTimer(
-            durationSeconds,
+            totalDurationSeconds,
             startTimestamp,
             initialSessionData.phase
           );
@@ -1245,23 +1583,39 @@ const SessionRoomMain: React.FC = () => {
             },
             onPhaseChange: (data) => {
               console.log("Phase change received:", data);
-              setSessionData((prev) =>
-                prev ? { ...prev, phase: data.phase.toLowerCase() } : null
-              );
 
+              // Force a re-render by creating a new object
+              setSessionData((prev) => {
+                if (!prev) return null;
+                return {
+                  ...prev,
+                  phase: data.phase.toLowerCase(),
+                  participants: [...(prev.participants || [])],
+                  config: { ...prev.config },
+                  selectedCase: prev.selectedCase
+                    ? { ...prev.selectedCase }
+                    : null,
+                };
+              });
+
+              // Stop any existing timer
+              clientTimer.stopClientTimer();
+
+              // Start timer if duration is provided
               if (data.durationSeconds && data.durationSeconds > 0) {
                 console.log(
                   "Starting client-side timer for phase:",
-                  data.phase
+                  data.phase,
+                  "duration:",
+                  data.durationSeconds,
+                  "startTimestamp:",
+                  data.startTimestamp
                 );
                 clientTimer.startClientTimer(
                   data.durationSeconds,
-                  data.startTimestamp,
-                  data.phase
+                  data.startTimestamp || Date.now(),
+                  data.phase.toLowerCase()
                 );
-              } else {
-                console.log("No timer for phase:", data.phase);
-                clientTimer.stopClientTimer();
               }
             },
             onTimerStart: (data) => {
@@ -1355,9 +1709,7 @@ const SessionRoomMain: React.FC = () => {
       whoThePatientIs:
         caseData.scenario ||
         caseData.description ||
-        `Patient presenting with ${
-          caseData.title?.toLowerCase() || "medical condition"
-        }`,
+        "Patient presenting with medical condition",
       otherInformation:
         caseData.doctorNotes || "No additional background information provided",
       whatYouMustDo:
@@ -1512,6 +1864,17 @@ const SessionRoomMain: React.FC = () => {
                 Session Controls
               </Typography>
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {sessionData?.selectedCase?.imageUrl && (
+                  <Button
+                    variant="outlined"
+                    fullWidth
+                    startIcon={<ImageIcon />}
+                    onClick={() => setShowImageModal(true)}
+                    sx={{ py: 1.5 }}
+                  >
+                    View Patient Image
+                  </Button>
+                )}
                 <Button
                   variant="contained"
                   fullWidth
@@ -1596,6 +1959,25 @@ const SessionRoomMain: React.FC = () => {
                   </Typography>
                 </CardContent>
               </Card>
+
+              {sessionData?.selectedCase?.imageUrl && (
+                <Card sx={{ mt: 2 }}>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      Session Controls
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      fullWidth
+                      startIcon={<ImageIcon />}
+                      onClick={() => setShowImageModal(true)}
+                      sx={{ py: 1.5 }}
+                    >
+                      View Patient Image
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
 
               <Card sx={{ mt: 2 }}>
                 <CardContent>
@@ -1682,6 +2064,8 @@ const SessionRoomMain: React.FC = () => {
             clientTimer={clientTimer}
             buttonStates={buttonStates}
             onGiveFeedback={handleGiveFeedback}
+            showImageModal={showImageModal}
+            setShowImageModal={setShowImageModal}
             selectedCase={sessionData.selectedCase}
           />
           {/* STABLE Feedback Component for Patient and Observer - Rendered separately to prevent parent re-renders */}
@@ -1705,29 +2089,18 @@ const SessionRoomMain: React.FC = () => {
         // Doctor sees waiting message instead of feedback form
         return <DoctorFeedbackView />;
       } else {
-        // Patient and Observer: Continue to show ConsultationView + StableFeedbackComponent
-        // StableFeedbackComponent remains mounted across phase transitions for perfect focus preservation
+        // Patient and Observer: Show only feedback form, no timer or consultation view
         return (
-          <>
-            <ConsultationView
-              userRole={userRole!}
-              clientTimer={clientTimer}
-              buttonStates={buttonStates}
-              onGiveFeedback={handleGiveFeedback}
-              selectedCase={sessionData.selectedCase}
+          <Container maxWidth="lg">
+            <StableFeedbackComponent
+              key={`stable-feedback-${sessionData.sessionCode}`}
+              sessionCode={sessionData.sessionCode}
+              phase={sessionData.phase}
+              onSubmitSuccess={handleSubmitFeedback}
+              visible={true}
+              {...stableFeedbackProps}
             />
-            {/* ALWAYS MOUNTED feedback component - preserves focus across phase transitions */}
-            <Container maxWidth="lg" sx={{ mt: 2 }}>
-              <StableFeedbackComponent
-                key={`stable-feedback-${sessionData.sessionCode}`}
-                sessionCode={sessionData.sessionCode}
-                phase={sessionData.phase}
-                onSubmitSuccess={handleSubmitFeedback}
-                visible={true}
-                {...stableFeedbackProps}
-              />
-            </Container>
-          </>
+          </Container>
         );
       }
     } else if (sessionData.phase === "completed") {
@@ -1856,24 +2229,24 @@ const SessionRoomMain: React.FC = () => {
             </Box>
           </Box>
 
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            {/* Participants */}
-            <AvatarGroup max={4}>
-              {sessionData.participants?.map((participant) => (
-                <Avatar
-                  key={participant.id}
-                  sx={{
-                    bgcolor: getRoleColor(participant.role),
-                    width: 32,
-                    height: 32,
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  {participant.name?.charAt(0) || "?"}
-                </Avatar>
-              )) || []}
-            </AvatarGroup>
+          {/* Participants */}
+          <AvatarGroup max={4}>
+            {sessionData.participants?.map((participant) => (
+              <Avatar
+                key={participant.id}
+                sx={{
+                  bgcolor: getRoleColor(participant.role),
+                  width: 32,
+                  height: 32,
+                  fontSize: "0.8rem",
+                }}
+              >
+                {participant.name?.charAt(0) || "?"}
+              </Avatar>
+            )) || []}
+          </AvatarGroup>
 
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <Button
               variant="contained"
               color="error"
@@ -1889,20 +2262,101 @@ const SessionRoomMain: React.FC = () => {
       {/* Main Content */}
       <Box sx={{ p: 3 }}>{renderMainContent()}</Box>
 
+      {/* Patient Image Modal */}
+      <Dialog
+        open={showImageModal}
+        onClose={() => setShowImageModal(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">Patient Image</Typography>
+            <IconButton onClick={() => setShowImageModal(false)}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box display="flex" justifyContent="center" alignItems="center" p={2}>
+            {sessionData?.selectedCase?.imageUrl && !imageError ? (
+              <img
+                src={
+                  sessionData.selectedCase.imageUrl?.startsWith("http")
+                    ? sessionData.selectedCase.imageUrl
+                    : `${
+                        import.meta.env.VITE_API_URL ||
+                        "http://localhost:8080/api"
+                      }${sessionData.selectedCase.imageUrl}`
+                }
+                alt="Patient image"
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "70vh",
+                  objectFit: "contain",
+                }}
+                onError={() => {
+                  setImageError(true);
+                }}
+              />
+            ) : (
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minHeight: "200px",
+                  backgroundColor: "#f5f5f5",
+                  borderRadius: 1,
+                  flexDirection: "column",
+                  gap: 1,
+                }}
+              >
+                <ImageIcon sx={{ fontSize: 48, color: "#999" }} />
+                <Typography variant="body2" color="text.secondary">
+                  Image could not be loaded
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setShowImageModal(false);
+              setImageError(false); // Reset error state when closing modal
+            }}
+            variant="contained"
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Exit Confirmation Dialog */}
       <Dialog open={showExitDialog} onClose={() => setShowExitDialog(false)}>
-        <DialogTitle>Exit Session</DialogTitle>
+        <DialogTitle>
+          {sessionData?.phase === "feedback"
+            ? "Complete Session"
+            : "Exit Session"}
+        </DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to leave this session? Other participants will
-            be notified and the session may end if there aren't enough
-            participants remaining.
+            {sessionData?.phase === "feedback"
+              ? "Are you sure you want to complete your session? You will no longer be able to modify your feedback after this action."
+              : "Are you sure you want to leave this session? Other participants will be notified and the session may end if there aren't enough participants remaining."}
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowExitDialog(false)}>Cancel</Button>
           <Button onClick={confirmExit} color="error" variant="contained">
-            Exit Session
+            {sessionData?.phase === "feedback"
+              ? "Complete My Session"
+              : "Exit Session"}
           </Button>
         </DialogActions>
       </Dialog>

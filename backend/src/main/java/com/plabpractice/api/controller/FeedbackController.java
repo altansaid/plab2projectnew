@@ -3,6 +3,8 @@ package com.plabpractice.api.controller;
 import com.plabpractice.api.model.*;
 import com.plabpractice.api.repository.*;
 import com.plabpractice.api.service.FeedbackService;
+import com.plabpractice.api.service.SessionService;
+import com.plabpractice.api.service.SessionWebSocketService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -20,6 +22,12 @@ public class FeedbackController {
     private FeedbackService feedbackService;
 
     @Autowired
+    private SessionService sessionService;
+
+    @Autowired
+    private SessionWebSocketService webSocketService;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Autowired
@@ -31,39 +39,35 @@ public class FeedbackController {
     @PostMapping("/submit")
     public ResponseEntity<?> submitFeedback(@RequestBody Map<String, Object> feedbackData, Authentication auth) {
         try {
+            System.out.println("🚀 Feedback submission received!");
+            System.out.println("📊 Raw feedback data: " + feedbackData);
+            System.out.println("👤 User: " + auth.getName());
+
             User user = userRepository.findByEmail(auth.getName())
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
             String sessionCode = (String) feedbackData.get("sessionCode");
             String comment = (String) feedbackData.get("comment");
-            Integer rating = (Integer) feedbackData.get("rating");
 
-            // Extract detailed scoring (optional, will fallback to overall rating if not
-            // provided)
-            Integer clinicalManagementScore = (Integer) feedbackData.getOrDefault("clinicalManagementScore", rating);
-            Integer communicationScore = (Integer) feedbackData.getOrDefault("communicationScore", rating);
-            Integer professionalismScore = (Integer) feedbackData.getOrDefault("professionalismScore", rating);
-            Integer empathyScore = (Integer) feedbackData.getOrDefault("empathyScore", rating);
-            Integer examinationSkillsScore = (Integer) feedbackData.getOrDefault("examinationSkillsScore", rating);
-            Integer diagnosisAccuracyScore = (Integer) feedbackData.getOrDefault("diagnosisAccuracyScore", rating);
-            Integer treatmentPlanScore = (Integer) feedbackData.getOrDefault("treatmentPlanScore", rating);
-            Integer dataGatheringScore = (Integer) feedbackData.getOrDefault("dataGatheringScore", rating);
-            Integer interpersonalSkillsScore = (Integer) feedbackData.getOrDefault("interpersonalSkillsScore", rating);
-            Integer timeManagementScore = (Integer) feedbackData.getOrDefault("timeManagementScore", rating);
-            Integer patientSafetyScore = (Integer) feedbackData.getOrDefault("patientSafetyScore", rating);
-            Integer decisionMakingScore = (Integer) feedbackData.getOrDefault("decisionMakingScore", rating);
-            Integer problemSolvingScore = (Integer) feedbackData.getOrDefault("problemSolvingScore", rating);
-            Integer documentationScore = (Integer) feedbackData.getOrDefault("documentationScore", rating);
-            Integer teamworkScore = (Integer) feedbackData.getOrDefault("teamworkScore", rating);
-            Integer leadershipScore = (Integer) feedbackData.getOrDefault("leadershipScore", rating);
-            Integer culturalSensitivityScore = (Integer) feedbackData.getOrDefault("culturalSensitivityScore", rating);
-            Integer ethicalAwarenessScore = (Integer) feedbackData.getOrDefault("ethicalAwarenessScore", rating);
-            Integer patientRapportScore = (Integer) feedbackData.getOrDefault("patientRapportScore", rating);
-            Integer confidenceScore = (Integer) feedbackData.getOrDefault("confidenceScore", rating);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> criteriaScoresData = (List<Map<String, Object>>) feedbackData
+                    .get("criteriaScores");
 
-            if (sessionCode == null || comment == null || rating == null) {
+            System.out.println("🔍 Parsed values:");
+            System.out.println("   sessionCode: " + sessionCode);
+            System.out.println("   comment: " + comment);
+            System.out.println("   criteriaScoresData: " + criteriaScoresData);
+            System.out.println(
+                    "   criteriaScoresData size: " + (criteriaScoresData != null ? criteriaScoresData.size() : "null"));
+
+            if (sessionCode == null || comment == null || criteriaScoresData == null) {
+                System.out.println("❌ Missing required fields validation failed!");
                 Map<String, Object> errorResponse = new HashMap<>();
                 errorResponse.put("error", "Missing required fields");
+                errorResponse.put("debug", Map.of(
+                        "sessionCode", sessionCode,
+                        "comment", comment,
+                        "criteriaScores", criteriaScoresData));
                 return ResponseEntity.badRequest().body(errorResponse);
             }
 
@@ -84,13 +88,50 @@ public class FeedbackController {
 
             User recipient = doctorParticipant.get().getUser();
 
+            // Convert criteria scores data to Feedback.FeedbackScore objects
+            List<Feedback.FeedbackScore> criteriaScores = new ArrayList<>();
+            for (Map<String, Object> scoreData : criteriaScoresData) {
+                String criterionId = (String) scoreData.get("criterionId");
+                String criterionName = (String) scoreData.get("criterionName");
+                Double score = scoreData.get("score") != null ? Double.valueOf(scoreData.get("score").toString())
+                        : null;
+
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> subScoresData = (List<Map<String, Object>>) scoreData.get("subScores");
+
+                List<Feedback.FeedbackSubScore> subScores = new ArrayList<>();
+                if (subScoresData != null) {
+                    for (Map<String, Object> subScoreData : subScoresData) {
+                        String subCriterionId = (String) subScoreData.get("subCriterionId");
+                        String subCriterionName = (String) subScoreData.get("subCriterionName");
+                        Double subScore = subScoreData.get("score") != null
+                                ? Double.valueOf(subScoreData.get("score").toString())
+                                : null;
+
+                        subScores.add(new Feedback.FeedbackSubScore(subCriterionId, subCriterionName, subScore));
+                    }
+                }
+
+                criteriaScores.add(new Feedback.FeedbackScore(criterionId, criterionName, score, subScores));
+            }
+
             // Create feedback
-            Feedback feedback = feedbackService.createFeedback(session, user, recipient, comment, rating,
-                    clinicalManagementScore, communicationScore, professionalismScore, empathyScore,
-                    examinationSkillsScore, diagnosisAccuracyScore, treatmentPlanScore, dataGatheringScore,
-                    interpersonalSkillsScore, timeManagementScore, patientSafetyScore, decisionMakingScore,
-                    problemSolvingScore, documentationScore, teamworkScore, leadershipScore,
-                    culturalSensitivityScore, ethicalAwarenessScore, patientRapportScore, confidenceScore);
+            Feedback feedback = feedbackService.createFeedback(session, user, recipient, comment, criteriaScores);
+
+            // Mark user as having given feedback
+            sessionService.markUserFeedbackGiven(sessionCode, user);
+
+            // Also mark user as having completed their session (since feedback submission =
+            // session completion)
+            sessionService.markUserSessionCompleted(sessionCode, user);
+
+            // Notify other participants via WebSocket about the completion
+            webSocketService.broadcastParticipantUpdate(sessionCode);
+
+            // Check if all users are completed to end the session
+            if (sessionService.areAllUsersCompleted(sessionCode)) {
+                webSocketService.endSession(sessionCode, "All participants have completed their sessions");
+            }
 
             Map<String, Object> response = new HashMap<>();
             response.put("message", "Feedback submitted successfully");
@@ -152,32 +193,15 @@ public class FeedbackController {
                     }
 
                     feedbackInfo.put("comment", feedback.getComment());
-                    feedbackInfo.put("score", feedback.getScore());
+                    feedbackInfo.put("overallPerformance", feedback.getOverallPerformance());
                     feedbackInfo.put("timestamp", feedback.getCreatedAt().toString());
 
-                    // Add detailed scoring information
-                    feedbackInfo.put("clinicalManagementScore", feedback.getClinicalManagementScore());
-                    feedbackInfo.put("communicationScore", feedback.getCommunicationScore());
-                    feedbackInfo.put("professionalismScore", feedback.getProfessionalismScore());
-                    feedbackInfo.put("empathyScore", feedback.getEmpathyScore());
-                    feedbackInfo.put("examinationSkillsScore", feedback.getExaminationSkillsScore());
-                    feedbackInfo.put("diagnosisAccuracyScore", feedback.getDiagnosisAccuracyScore());
-                    feedbackInfo.put("treatmentPlanScore", feedback.getTreatmentPlanScore());
-                    feedbackInfo.put("dataGatheringScore", feedback.getDataGatheringScore());
-                    feedbackInfo.put("interpersonalSkillsScore", feedback.getInterpersonalSkillsScore());
-                    feedbackInfo.put("timeManagementScore", feedback.getTimeManagementScore());
-                    feedbackInfo.put("patientSafetyScore", feedback.getPatientSafetyScore());
-                    feedbackInfo.put("decisionMakingScore", feedback.getDecisionMakingScore());
-                    feedbackInfo.put("problemSolvingScore", feedback.getProblemSolvingScore());
-                    feedbackInfo.put("documentationScore", feedback.getDocumentationScore());
-                    feedbackInfo.put("teamworkScore", feedback.getTeamworkScore());
-                    feedbackInfo.put("leadershipScore", feedback.getLeadershipScore());
-                    feedbackInfo.put("culturalSensitivityScore", feedback.getCulturalSensitivityScore());
-                    feedbackInfo.put("ethicalAwarenessScore", feedback.getEthicalAwarenessScore());
-                    feedbackInfo.put("patientRapportScore", feedback.getPatientRapportScore());
-                    feedbackInfo.put("confidenceScore", feedback.getConfidenceScore());
+                    // Add dynamic criteria scores
+                    feedbackInfo.put("criteriaScores", feedback.getCriteriaScores());
 
                     // Add case information if available
+                    // Note: Case title is shown in feedback phase since practice is already
+                    // completed
                     if (session.getSelectedCase() != null) {
                         feedbackInfo.put("caseTitle", session.getSelectedCase().getTitle());
                         feedbackInfo.put("caseId", session.getSelectedCase().getId());
@@ -236,30 +260,11 @@ public class FeedbackController {
                 feedbackInfo.put("toUser", feedback.getRecipient().getName());
                 feedbackInfo.put("toUserEmail", feedback.getRecipient().getEmail());
                 feedbackInfo.put("comment", feedback.getComment());
-                feedbackInfo.put("score", feedback.getScore());
+                feedbackInfo.put("overallPerformance", feedback.getOverallPerformance());
                 feedbackInfo.put("timestamp", feedback.getCreatedAt().toString());
 
-                // Add detailed scoring information
-                feedbackInfo.put("clinicalManagementScore", feedback.getClinicalManagementScore());
-                feedbackInfo.put("communicationScore", feedback.getCommunicationScore());
-                feedbackInfo.put("professionalismScore", feedback.getProfessionalismScore());
-                feedbackInfo.put("empathyScore", feedback.getEmpathyScore());
-                feedbackInfo.put("examinationSkillsScore", feedback.getExaminationSkillsScore());
-                feedbackInfo.put("diagnosisAccuracyScore", feedback.getDiagnosisAccuracyScore());
-                feedbackInfo.put("treatmentPlanScore", feedback.getTreatmentPlanScore());
-                feedbackInfo.put("dataGatheringScore", feedback.getDataGatheringScore());
-                feedbackInfo.put("interpersonalSkillsScore", feedback.getInterpersonalSkillsScore());
-                feedbackInfo.put("timeManagementScore", feedback.getTimeManagementScore());
-                feedbackInfo.put("patientSafetyScore", feedback.getPatientSafetyScore());
-                feedbackInfo.put("decisionMakingScore", feedback.getDecisionMakingScore());
-                feedbackInfo.put("problemSolvingScore", feedback.getProblemSolvingScore());
-                feedbackInfo.put("documentationScore", feedback.getDocumentationScore());
-                feedbackInfo.put("teamworkScore", feedback.getTeamworkScore());
-                feedbackInfo.put("leadershipScore", feedback.getLeadershipScore());
-                feedbackInfo.put("culturalSensitivityScore", feedback.getCulturalSensitivityScore());
-                feedbackInfo.put("ethicalAwarenessScore", feedback.getEthicalAwarenessScore());
-                feedbackInfo.put("patientRapportScore", feedback.getPatientRapportScore());
-                feedbackInfo.put("confidenceScore", feedback.getConfidenceScore());
+                // Add dynamic criteria scores
+                feedbackInfo.put("criteriaScores", feedback.getCriteriaScores());
 
                 return feedbackInfo;
             }).collect(Collectors.toList());

@@ -18,46 +18,91 @@ public class FeedbackService {
     @Autowired
     private FeedbackRepository feedbackRepository;
 
-    public Feedback createFeedback(Session session, User sender, User recipient, String comment, Integer score,
-            Integer clinicalManagementScore, Integer communicationScore, Integer professionalismScore,
-            Integer empathyScore, Integer examinationSkillsScore, Integer diagnosisAccuracyScore,
-            Integer treatmentPlanScore, Integer dataGatheringScore, Integer interpersonalSkillsScore,
-            Integer timeManagementScore, Integer patientSafetyScore, Integer decisionMakingScore,
-            Integer problemSolvingScore, Integer documentationScore, Integer teamworkScore,
-            Integer leadershipScore, Integer culturalSensitivityScore, Integer ethicalAwarenessScore,
-            Integer patientRapportScore, Integer confidenceScore) {
+    public Feedback createFeedback(Session session, User sender, User recipient, String comment,
+            List<Feedback.FeedbackScore> criteriaScores) {
+
+        System.out.println("🔧 Creating feedback in service:");
+        System.out.println("   session: " + session.getId());
+        System.out.println("   sender: " + sender.getEmail());
+        System.out.println("   recipient: " + recipient.getEmail());
+        System.out.println("   comment: " + comment);
+        System.out.println("   criteriaScores size: " + (criteriaScores != null ? criteriaScores.size() : "null"));
+
+        if (criteriaScores != null) {
+            for (int i = 0; i < criteriaScores.size(); i++) {
+                Feedback.FeedbackScore score = criteriaScores.get(i);
+                System.out.println("   criteria[" + i + "]: " + score.getCriterionName() + " = " + score.getScore());
+                if (score.getSubScores() != null) {
+                    for (int j = 0; j < score.getSubScores().size(); j++) {
+                        Feedback.FeedbackSubScore subScore = score.getSubScores().get(j);
+                        System.out.println("     subCriteria[" + j + "]: " + subScore.getSubCriterionName() + " = "
+                                + subScore.getScore());
+                    }
+                }
+            }
+        }
 
         Feedback feedback = new Feedback();
         feedback.setSession(session);
         feedback.setSender(sender);
         feedback.setRecipient(recipient);
         feedback.setComment(comment);
-        feedback.setScore(score);
+        feedback.setCriteriaScores(criteriaScores);
         feedback.setCreatedAt(LocalDateTime.now());
 
-        // Set all detailed scores
-        feedback.setClinicalManagementScore(clinicalManagementScore);
-        feedback.setCommunicationScore(communicationScore);
-        feedback.setProfessionalismScore(professionalismScore);
-        feedback.setEmpathyScore(empathyScore);
-        feedback.setExaminationSkillsScore(examinationSkillsScore);
-        feedback.setDiagnosisAccuracyScore(diagnosisAccuracyScore);
-        feedback.setTreatmentPlanScore(treatmentPlanScore);
-        feedback.setDataGatheringScore(dataGatheringScore);
-        feedback.setInterpersonalSkillsScore(interpersonalSkillsScore);
-        feedback.setTimeManagementScore(timeManagementScore);
-        feedback.setPatientSafetyScore(patientSafetyScore);
-        feedback.setDecisionMakingScore(decisionMakingScore);
-        feedback.setProblemSolvingScore(problemSolvingScore);
-        feedback.setDocumentationScore(documentationScore);
-        feedback.setTeamworkScore(teamworkScore);
-        feedback.setLeadershipScore(leadershipScore);
-        feedback.setCulturalSensitivityScore(culturalSensitivityScore);
-        feedback.setEthicalAwarenessScore(ethicalAwarenessScore);
-        feedback.setPatientRapportScore(patientRapportScore);
-        feedback.setConfidenceScore(confidenceScore);
+        // Calculate overall performance from criteria scores
+        double overallPerformance = calculateOverallPerformance(criteriaScores);
+        System.out.println("📊 Calculated overallPerformance: " + overallPerformance);
+        feedback.setOverallPerformance(overallPerformance);
 
-        return feedbackRepository.save(feedback);
+        // Set legacy score field (rounded integer version of overallPerformance)
+        int legacyScore = (int) Math.round(overallPerformance);
+        System.out.println("🔄 Setting legacy score: " + legacyScore);
+        feedback.setScore(legacyScore);
+
+        System.out.println("💾 About to save feedback to database...");
+        try {
+            Feedback savedFeedback = feedbackRepository.save(feedback);
+            System.out.println("✅ Feedback saved successfully with ID: " + savedFeedback.getId());
+            return savedFeedback;
+        } catch (Exception e) {
+            System.out.println("❌ Database save failed: " + e.getMessage());
+            e.printStackTrace();
+            throw e;
+        }
+    }
+
+    private double calculateOverallPerformance(List<Feedback.FeedbackScore> criteriaScores) {
+        if (criteriaScores == null || criteriaScores.isEmpty()) {
+            return 0.0;
+        }
+
+        double totalScore = 0.0;
+        int count = 0;
+
+        for (Feedback.FeedbackScore criteriaScore : criteriaScores) {
+            if (criteriaScore.getScore() != null) {
+                // Direct score
+                totalScore += criteriaScore.getScore();
+                count++;
+            } else if (criteriaScore.getSubScores() != null && !criteriaScore.getSubScores().isEmpty()) {
+                // Calculate average of sub-scores
+                double subTotal = 0.0;
+                int subCount = 0;
+                for (Feedback.FeedbackSubScore subScore : criteriaScore.getSubScores()) {
+                    if (subScore.getScore() != null) {
+                        subTotal += subScore.getScore();
+                        subCount++;
+                    }
+                }
+                if (subCount > 0) {
+                    totalScore += (subTotal / subCount);
+                    count++;
+                }
+            }
+        }
+
+        return count > 0 ? totalScore / count : 0.0;
     }
 
     public List<Feedback> getSessionFeedback(Long sessionId) {

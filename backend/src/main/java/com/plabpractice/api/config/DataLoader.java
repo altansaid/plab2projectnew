@@ -35,6 +35,9 @@ public class DataLoader implements CommandLineRunner {
                 try {
                         System.out.println("=== DataLoader: Starting data initialization ===");
 
+                        // Fix image URLs that have duplicate /api prefix (one-time migration)
+                        fixImageUrls();
+
                         // Load default users if database is empty
                         if (userRepository.count() == 0) {
                                 System.out.println("Database is empty, loading default users...");
@@ -57,6 +60,37 @@ public class DataLoader implements CommandLineRunner {
                         e.printStackTrace();
                         // Don't throw the exception to prevent application startup failure
                         System.err.println("⚠️  Application will continue without sample data");
+                }
+        }
+
+        private void fixImageUrls() {
+                try {
+                        System.out.println("Checking for image URLs that need fixing...");
+
+                        // Find all cases with image URLs that have duplicate /api prefix
+                        var casesWithImages = caseRepository.findAll().stream()
+                                        .filter(c -> c.getImageUrl() != null
+                                                        && c.getImageUrl().startsWith("/api/uploads/images/"))
+                                        .toList();
+
+                        if (!casesWithImages.isEmpty()) {
+                                System.out.println("Found " + casesWithImages.size() + " cases with image URLs to fix");
+
+                                for (Case caseEntity : casesWithImages) {
+                                        String oldUrl = caseEntity.getImageUrl();
+                                        String newUrl = oldUrl.replace("/api/uploads/images/", "/uploads/images/");
+                                        caseEntity.setImageUrl(newUrl);
+                                        caseRepository.save(caseEntity);
+                                        System.out.println("Fixed image URL: " + oldUrl + " -> " + newUrl);
+                                }
+
+                                System.out.println("Image URL migration completed!");
+                        } else {
+                                System.out.println("No image URLs need fixing");
+                        }
+                } catch (Exception e) {
+                        System.err.println("Error during image URL migration: " + e.getMessage());
+                        e.printStackTrace();
                 }
         }
 

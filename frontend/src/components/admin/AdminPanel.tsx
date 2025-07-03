@@ -34,6 +34,7 @@ import {
   deleteCategory,
 } from "../../features/admin/adminSlice";
 import { api } from "../../services/api";
+import CaseEditor from "./CaseEditor";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -58,31 +59,43 @@ const TabPanel = (props: TabPanelProps) => {
 };
 
 const AdminPanel: React.FC = () => {
+  console.log("🚨 AdminPanel component is mounting!");
+
   const dispatch = useDispatch();
   const { cases, categories } = useSelector((state: RootState) => state.admin);
   const [tabValue, setTabValue] = useState(0);
-  const [openCaseDialog, setOpenCaseDialog] = useState(false);
+
+  // Debug: Log Redux state
+  console.log("🏪 Redux Admin State - Cases:", cases);
+  console.log("🏪 Redux Admin State - Categories:", categories);
+  const [openCaseEditor, setOpenCaseEditor] = useState(false);
   const [openCategoryDialog, setOpenCategoryDialog] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [selectedCase, setSelectedCase] = useState<any>(null);
+  const [selectedCategory, setSelectedCategory] = useState<any>(null);
   const [formData, setFormData] = useState({
-    title: "",
-    category: "",
-    doctorNotes: "",
-    patientNotes: "",
     categoryName: "",
   });
 
   useEffect(() => {
     const fetchData = async () => {
+      console.log("🔄 AdminPanel: Starting to fetch data...");
       try {
+        console.log("📡 Making API calls to /cases and /cases/categories");
         const [casesResponse, categoriesResponse] = await Promise.all([
           api.get("/cases"),
           api.get("/categories"),
         ]);
+        console.log("✅ Cases response:", casesResponse.data);
+        console.log("✅ Categories response:", categoriesResponse.data);
         dispatch(setCases(casesResponse.data));
         dispatch(setCategories(categoriesResponse.data));
-      } catch (error) {
-        console.error("Failed to fetch admin data:", error);
+        console.log("✅ Data dispatched to Redux store");
+      } catch (error: any) {
+        console.error("❌ Failed to fetch admin data:", error);
+        console.error(
+          "❌ Error details:",
+          error.response?.data || error.message
+        );
       }
     };
 
@@ -93,69 +106,42 @@ const AdminPanel: React.FC = () => {
     setTabValue(newValue);
   };
 
-  const handleCaseDialogOpen = (caseItem?: any) => {
-    if (caseItem) {
-      setSelectedItem(caseItem);
-      setFormData({
-        ...formData,
-        title: caseItem.title,
-        category: caseItem.category,
-        doctorNotes: caseItem.doctorNotes,
-        patientNotes: caseItem.patientNotes,
-      });
-    } else {
-      setSelectedItem(null);
-      setFormData({
-        ...formData,
-        title: "",
-        category: "",
-        doctorNotes: "",
-        patientNotes: "",
-      });
-    }
-    setOpenCaseDialog(true);
+  const handleCaseEditorOpen = (caseItem?: any) => {
+    setSelectedCase(caseItem || null);
+    setOpenCaseEditor(true);
   };
 
   const handleCategoryDialogOpen = (category?: any) => {
     if (category) {
-      setSelectedItem(category);
-      setFormData({ ...formData, categoryName: category.name });
+      setSelectedCategory(category);
+      setFormData({ categoryName: category.name });
     } else {
-      setSelectedItem(null);
-      setFormData({ ...formData, categoryName: "" });
+      setSelectedCategory(null);
+      setFormData({ categoryName: "" });
     }
     setOpenCategoryDialog(true);
   };
 
-  const handleCaseSubmit = async () => {
+  const handleCaseSave = async (caseData: any) => {
     try {
-      if (selectedItem) {
-        const response = await api.put(`/cases/${selectedItem.id}`, {
-          title: formData.title,
-          category: formData.category,
-          doctorNotes: formData.doctorNotes,
-          patientNotes: formData.patientNotes,
-        });
+      if (selectedCase) {
+        const response = await api.put(`/cases/${selectedCase.id}`, caseData);
         dispatch(updateCase(response.data));
       } else {
-        const response = await api.post("/cases", {
-          title: formData.title,
-          category: formData.category,
-          doctorNotes: formData.doctorNotes,
-          patientNotes: formData.patientNotes,
-        });
+        const response = await api.post("/cases", caseData);
         dispatch(addCase(response.data));
       }
-      setOpenCaseDialog(false);
+      console.log("Case saved successfully");
     } catch (error) {
       console.error("Failed to save case:", error);
+      throw error;
     }
   };
 
   const handleCategorySubmit = async () => {
     try {
-      if (selectedItem) {
-        const response = await api.put(`/categories/${selectedItem.id}`, {
+      if (selectedCategory) {
+        const response = await api.put(`/categories/${selectedCategory.id}`, {
           name: formData.categoryName,
         });
         dispatch(updateCategory(response.data));
@@ -171,7 +157,7 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  const handleDelete = async (type: "case" | "category", id: string) => {
+  const handleDelete = async (type: "case" | "category", id: number) => {
     try {
       if (type === "case") {
         await api.delete(`/cases/${id}`);
@@ -180,8 +166,16 @@ const AdminPanel: React.FC = () => {
         await api.delete(`/categories/${id}`);
         dispatch(deleteCategory(id));
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to delete:", error);
+
+      // Show user-friendly error message
+      const errorMessage =
+        error.response?.data?.error ||
+        `Failed to delete ${type}. Please try again.`;
+
+      // You can replace this with a proper toast/snackbar notification
+      alert(errorMessage);
     }
   };
 
@@ -201,7 +195,7 @@ const AdminPanel: React.FC = () => {
 
         <TabPanel value={tabValue} index={0}>
           <Box sx={{ mb: 2 }}>
-            <Button variant="contained" onClick={() => handleCaseDialogOpen()}>
+            <Button variant="contained" onClick={() => handleCaseEditorOpen()}>
               Add New Case
             </Button>
           </Box>
@@ -211,12 +205,12 @@ const AdminPanel: React.FC = () => {
               <ListItem key={caseItem.id}>
                 <ListItemText
                   primary={caseItem.title}
-                  secondary={caseItem.category}
+                  secondary={caseItem.category?.name || "No category"}
                 />
                 <ListItemSecondaryAction>
                   <IconButton
                     edge="end"
-                    onClick={() => handleCaseDialogOpen(caseItem)}
+                    onClick={() => handleCaseEditorOpen(caseItem)}
                   >
                     <EditIcon />
                   </IconButton>
@@ -265,65 +259,14 @@ const AdminPanel: React.FC = () => {
           </List>
         </TabPanel>
 
-        {/* Case Dialog */}
-        <Dialog
-          open={openCaseDialog}
-          onClose={() => setOpenCaseDialog(false)}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle>
-            {selectedItem ? "Edit Case" : "Add New Case"}
-          </DialogTitle>
-          <DialogContent>
-            <TextField
-              fullWidth
-              label="Title"
-              value={formData.title}
-              onChange={(e) =>
-                setFormData({ ...formData, title: e.target.value })
-              }
-              margin="normal"
-            />
-            <TextField
-              fullWidth
-              label="Category"
-              value={formData.category}
-              onChange={(e) =>
-                setFormData({ ...formData, category: e.target.value })
-              }
-              margin="normal"
-            />
-            <TextField
-              fullWidth
-              multiline
-              rows={4}
-              label="Doctor Notes"
-              value={formData.doctorNotes}
-              onChange={(e) =>
-                setFormData({ ...formData, doctorNotes: e.target.value })
-              }
-              margin="normal"
-            />
-            <TextField
-              fullWidth
-              multiline
-              rows={4}
-              label="Patient Notes"
-              value={formData.patientNotes}
-              onChange={(e) =>
-                setFormData({ ...formData, patientNotes: e.target.value })
-              }
-              margin="normal"
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setOpenCaseDialog(false)}>Cancel</Button>
-            <Button onClick={handleCaseSubmit} variant="contained">
-              Save
-            </Button>
-          </DialogActions>
-        </Dialog>
+        {/* Case Editor */}
+        <CaseEditor
+          open={openCaseEditor}
+          onClose={() => setOpenCaseEditor(false)}
+          caseData={selectedCase}
+          categories={categories}
+          onSave={handleCaseSave}
+        />
 
         {/* Category Dialog */}
         <Dialog
@@ -331,7 +274,7 @@ const AdminPanel: React.FC = () => {
           onClose={() => setOpenCategoryDialog(false)}
         >
           <DialogTitle>
-            {selectedItem ? "Edit Category" : "Add New Category"}
+            {selectedCategory ? "Edit Category" : "Add New Category"}
           </DialogTitle>
           <DialogContent>
             <TextField

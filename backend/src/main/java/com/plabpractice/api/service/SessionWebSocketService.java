@@ -1,6 +1,7 @@
 package com.plabpractice.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.plabpractice.api.model.Case;
 import com.plabpractice.api.model.Session;
 import com.plabpractice.api.model.SessionParticipant;
 import com.plabpractice.api.model.User;
@@ -37,9 +38,19 @@ public class SessionWebSocketService {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private SessionService sessionService;
+
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(10);
     private final Map<String, Boolean> activeTimers = new ConcurrentHashMap<>();
     private final Map<String, ScheduledFuture<?>> timerTasks = new ConcurrentHashMap<>();
+
+    // User disconnect tracking - sessionCode_userId -> last activity timestamp
+    private final Map<String, Long> userLastActivity = new ConcurrentHashMap<>();
+    // User disconnect timeout tasks - sessionCode_userId -> timeout task
+    private final Map<String, ScheduledFuture<?>> disconnectTimeouts = new ConcurrentHashMap<>();
+
+    private static final int DISCONNECT_TIMEOUT_MINUTES = 5;
 
     public void broadcastSessionUpdate(String sessionCode) {
         Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
@@ -54,16 +65,20 @@ public class SessionWebSocketService {
         Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
         if (sessionOpt.isPresent()) {
             Session session = sessionOpt.get();
-            List<SessionParticipant> participants = participantRepository.findBySessionId(session.getId());
+            // Only get ACTIVE participants
+            List<SessionParticipant> activeParticipants = participantRepository
+                    .findBySessionIdAndIsActive(session.getId(), true);
 
             // Enhanced participant data with user information
-            List<Map<String, Object>> participantDetails = participants.stream().map(p -> {
+            List<Map<String, Object>> participantDetails = activeParticipants.stream().map(p -> {
                 Map<String, Object> detail = new HashMap<>();
                 detail.put("id", p.getId().toString());
                 detail.put("userId", p.getUser().getId());
                 detail.put("name", p.getUser().getName());
                 detail.put("role", p.getRole().toString().toLowerCase());
                 detail.put("isOnline", true); // For now, assume all are online
+                detail.put("hasCompleted", p.getHasCompleted());
+                detail.put("hasGivenFeedback", p.getHasGivenFeedback());
                 return detail;
             }).toList();
 
@@ -72,51 +87,31 @@ public class SessionWebSocketService {
             participantData.put("participants", participantDetails);
             participantData.put("sessionCode", sessionCode);
 
-            System.out.println("Broadcasting participant update: " + participantData);
+            System.out
+                    .println("Broadcasting participant update: " + activeParticipants.size() + " active participants");
             messagingTemplate.convertAndSend("/topic/session/" + sessionCode, participantData);
         }
     }
 
-    public void broadcastPhaseChange(String sessionCode, Session.Phase newPhase) {
+    public void broadcastPhaseChange(String sessionCode, String phase, int durationSeconds, long startTimestamp) {
+        Map<String, Object> message = new HashMap<>();
+        message.put("type", "PHASE_CHANGE");
+        message.put("phase", phase);
+        message.put("durationSeconds", durationSeconds);
+        message.put("startTimestamp", startTimestamp);
+
+        // Get the session to include the configured times
         Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
         if (sessionOpt.isPresent()) {
             Session session = sessionOpt.get();
-            session.setPhase(newPhase);
-            session.setPhaseStartTime(LocalDateTime.now());
-
-            // Set timer duration based on phase
-            int phaseDurationSeconds = 0;
-            if (newPhase == Session.Phase.READING) {
-                phaseDurationSeconds = session.getReadingTime() * 60;
-                session.setTimeRemaining(phaseDurationSeconds);
-            } else if (newPhase == Session.Phase.CONSULTATION) {
-                phaseDurationSeconds = session.getConsultationTime() * 60;
-                session.setTimeRemaining(phaseDurationSeconds);
-            } else if (newPhase == Session.Phase.FEEDBACK) {
-                session.setTimeRemaining(0);
-            }
-
-            sessionRepository.save(session);
-
-            // Send phase change with client-side timer data
-            long startTimestamp = System.currentTimeMillis();
-            Map<String, Object> phaseData = new HashMap<>();
-            phaseData.put("type", "PHASE_CHANGE");
-            phaseData.put("phase", newPhase);
-            phaseData.put("durationSeconds", phaseDurationSeconds);
-            phaseData.put("startTimestamp", startTimestamp);
-            phaseData.put("sessionCode", sessionCode);
-            phaseData.put("message", "Phase changed - clients will handle countdown locally");
-            messagingTemplate.convertAndSend("/topic/session/" + sessionCode, phaseData);
-
-            System.out.println("Phase changed to " + newPhase + " for session: " + sessionCode +
-                    " - clients will handle " + phaseDurationSeconds + "s countdown locally");
-
-            // Send case data to all participants when entering reading phase
-            if (newPhase == Session.Phase.READING) {
-                sendCaseDataToAllParticipants(sessionCode);
+            if (phase.equalsIgnoreCase("CONSULTATION")) {
+                message.put("durationSeconds", session.getConsultationTime() * 60);
+            } else if (phase.equalsIgnoreCase("READING")) {
+                message.put("durationSeconds", session.getReadingTime() * 60);
             }
         }
+
+        messagingTemplate.convertAndSend("/topic/session/" + sessionCode, message);
     }
 
     public void startTimer(String sessionCode) {
@@ -190,15 +185,40 @@ public class SessionWebSocketService {
             nextPhase = Session.Phase.CONSULTATION;
         } else if (currentPhase == Session.Phase.CONSULTATION) {
             nextPhase = Session.Phase.FEEDBACK;
+        } else if (currentPhase == Session.Phase.FEEDBACK) {
+            // Feedback phase completed - end the session
+            endSession(session.getCode(), "Session completed successfully");
+            return;
         }
 
         if (nextPhase != null) {
-            broadcastPhaseChange(session.getCode(), nextPhase);
+            broadcastPhaseChange(session.getCode(), nextPhase.toString(), getCurrentPhaseTime(session),
+                    System.currentTimeMillis());
             // Restart timer for the new phase (unless transitioning to feedback)
             if (nextPhase != Session.Phase.FEEDBACK) {
                 startTimer(session.getCode());
+            } else {
+                // Start a timer for feedback phase (e.g., 10 minutes max for feedback)
+                scheduleFeedbackTimeout(session.getCode(), 10 * 60); // 10 minutes
             }
         }
+    }
+
+    private void scheduleFeedbackTimeout(String sessionCode, int timeoutSeconds) {
+        // Schedule automatic session completion after feedback timeout
+        ScheduledFuture<?> feedbackTask = scheduler.schedule(() -> {
+            Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
+            if (sessionOpt.isPresent()) {
+                Session session = sessionOpt.get();
+                if (session.getPhase() == Session.Phase.FEEDBACK &&
+                        session.getStatus() != Session.Status.COMPLETED) {
+                    endSession(sessionCode, "Feedback phase timeout - session auto-completed");
+                }
+            }
+        }, timeoutSeconds, TimeUnit.SECONDS);
+
+        // Store the task for potential cancellation
+        timerTasks.put(sessionCode + "_feedback", feedbackTask);
     }
 
     public void skipPhase(String sessionCode, User user) {
@@ -230,8 +250,17 @@ public class SessionWebSocketService {
 
         if (nextPhase != null) {
             stopTimer(sessionCode);
-            broadcastPhaseChange(sessionCode, nextPhase);
-            // Restart timer for the new phase (unless transitioning to feedback)
+            // Update the session phase before broadcasting
+            session.setPhase(nextPhase);
+            session = sessionRepository.save(session);
+
+            // Get the correct duration for the next phase
+            int phaseDuration = getCurrentPhaseTime(session);
+            long startTimestamp = System.currentTimeMillis();
+
+            broadcastPhaseChange(sessionCode, nextPhase.toString(), phaseDuration, startTimestamp);
+
+            // Start timer for the new phase (unless transitioning to feedback)
             if (nextPhase != Session.Phase.FEEDBACK) {
                 startTimer(sessionCode);
             }
@@ -254,7 +283,10 @@ public class SessionWebSocketService {
         }
 
         SessionParticipant participant = participantOpt.get();
-        participantRepository.delete(participant);
+
+        // Mark participant as inactive instead of deleting
+        participant.setIsActive(false);
+        participantRepository.save(participant);
 
         // Broadcast user left message
         Map<String, Object> userLeftData = new HashMap<>();
@@ -265,8 +297,9 @@ public class SessionWebSocketService {
         userLeftData.put("userRole", participant.getRole().toString().toLowerCase());
         messagingTemplate.convertAndSend("/topic/session/" + sessionCode, userLeftData);
 
-        // Check remaining participants
-        List<SessionParticipant> remainingParticipants = participantRepository.findBySessionId(session.getId());
+        // Check remaining ACTIVE participants only
+        List<SessionParticipant> remainingParticipants = participantRepository
+                .findBySessionIdAndIsActive(session.getId(), true);
 
         // Only end session if there are insufficient participants for a meaningful
         // session
@@ -344,7 +377,8 @@ public class SessionWebSocketService {
             if (sessionOpt.isPresent()) {
                 Session session = sessionOpt.get();
                 if (session.getPhase() == Session.Phase.WAITING) {
-                    broadcastPhaseChange(sessionCode, Session.Phase.READING);
+                    broadcastPhaseChange(sessionCode, session.getPhase().toString(), getCurrentPhaseTime(session),
+                            System.currentTimeMillis());
                 }
             }
         }
@@ -371,7 +405,8 @@ public class SessionWebSocketService {
         List<SessionParticipant> participants = participantRepository.findBySessionId(session.getId());
         data.put("participants", participants);
 
-        // Include case data if available
+        // Include case data if available - title will be filtered on frontend based on
+        // role
         if (session.getSelectedCase() != null) {
             data.put("selectedCase", session.getSelectedCase());
         }
@@ -380,14 +415,12 @@ public class SessionWebSocketService {
     }
 
     private int getCurrentPhaseTime(Session session) {
-        switch (session.getPhase()) {
-            case READING:
-                return session.getReadingTime() * 60;
-            case CONSULTATION:
-                return session.getConsultationTime() * 60;
-            default:
-                return 0;
+        if (session.getPhase() == Session.Phase.READING) {
+            return session.getReadingTime() * 60;
+        } else if (session.getPhase() == Session.Phase.CONSULTATION) {
+            return session.getConsultationTime() * 60;
         }
+        return 0;
     }
 
     public void sendMessageToUser(String sessionCode, String userId, Object message) {
@@ -410,9 +443,34 @@ public class SessionWebSocketService {
                     participant.getRole().equals(SessionParticipant.Role.PATIENT) ||
                     participant.getRole().equals(SessionParticipant.Role.OBSERVER)) {
 
+                Object caseToSend;
+                if (participant.getRole().equals(SessionParticipant.Role.DOCTOR)) {
+                    // Filter case for doctors - remove title
+                    Map<String, Object> filteredCase = new HashMap<>();
+                    Case fullCase = session.getSelectedCase();
+                    filteredCase.put("id", fullCase.getId());
+                    // Don't include title for doctors
+                    filteredCase.put("description", fullCase.getDescription());
+                    filteredCase.put("scenario", fullCase.getScenario());
+                    filteredCase.put("doctorRole", fullCase.getDoctorRole());
+                    filteredCase.put("patientRole", fullCase.getPatientRole());
+                    filteredCase.put("doctorNotes", fullCase.getDoctorNotes());
+                    filteredCase.put("patientNotes", fullCase.getPatientNotes());
+                    filteredCase.put("observerNotes", fullCase.getObserverNotes());
+                    filteredCase.put("category", fullCase.getCategory());
+                    filteredCase.put("difficulty", fullCase.getDifficulty());
+                    filteredCase.put("duration", fullCase.getDuration());
+                    filteredCase.put("sections", fullCase.getSections());
+                    filteredCase.put("feedbackCriteria", fullCase.getFeedbackCriteria());
+                    caseToSend = filteredCase;
+                } else {
+                    // For non-doctor roles, send full case
+                    caseToSend = session.getSelectedCase();
+                }
+
                 Map<String, Object> caseData = Map.of(
                         "type", "CASE_DATA",
-                        "case", session.getSelectedCase());
+                        "case", caseToSend);
                 sendMessageToUser(sessionCode, participant.getUser().getId().toString(), caseData);
             }
         }
@@ -422,5 +480,77 @@ public class SessionWebSocketService {
     // method
     public void sendCaseDataToDoctor(String sessionCode) {
         sendCaseDataToAllParticipants(sessionCode);
+    }
+
+    // User Activity Tracking Methods
+    public void trackUserActivity(String sessionCode, Long userId) {
+        String userKey = sessionCode + "_" + userId;
+        userLastActivity.put(userKey, System.currentTimeMillis());
+
+        // Cancel existing disconnect timeout for this user
+        ScheduledFuture<?> existingTimeout = disconnectTimeouts.remove(userKey);
+        if (existingTimeout != null && !existingTimeout.isCancelled()) {
+            existingTimeout.cancel(false);
+        }
+
+        // Schedule new disconnect timeout
+        ScheduledFuture<?> timeoutTask = scheduler.schedule(() -> {
+            handleUserDisconnectTimeout(sessionCode, userId);
+        }, DISCONNECT_TIMEOUT_MINUTES, TimeUnit.MINUTES);
+
+        disconnectTimeouts.put(userKey, timeoutTask);
+
+        System.out.println("User activity tracked for " + userKey + ", disconnect timeout set for "
+                + DISCONNECT_TIMEOUT_MINUTES + " minutes");
+    }
+
+    public void handleUserDisconnectTimeout(String sessionCode, Long userId) {
+        String userKey = sessionCode + "_" + userId;
+
+        // Remove user from tracking
+        userLastActivity.remove(userKey);
+        disconnectTimeouts.remove(userKey);
+
+        // Find and remove user from session
+        Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
+        if (sessionOpt.isPresent()) {
+            Session session = sessionOpt.get();
+
+            // Skip if session is already completed
+            if (session.getStatus() == Session.Status.COMPLETED) {
+                return;
+            }
+
+            Optional<SessionParticipant> participantOpt = participantRepository
+                    .findBySessionIdAndUserId(session.getId(), userId);
+
+            if (participantOpt.isPresent()) {
+                SessionParticipant participant = participantOpt.get();
+                System.out
+                        .println("User " + participant.getUser().getName() + " timed out from session " + sessionCode);
+
+                // Use existing handleUserLeave logic
+                handleUserLeave(sessionCode, participant.getUser());
+            }
+        }
+    }
+
+    public void startUserActivityTracking(String sessionCode, Long userId) {
+        trackUserActivity(sessionCode, userId);
+    }
+
+    public void stopUserActivityTracking(String sessionCode, Long userId) {
+        String userKey = sessionCode + "_" + userId;
+
+        // Remove from tracking
+        userLastActivity.remove(userKey);
+
+        // Cancel timeout task
+        ScheduledFuture<?> timeoutTask = disconnectTimeouts.remove(userKey);
+        if (timeoutTask != null && !timeoutTask.isCancelled()) {
+            timeoutTask.cancel(false);
+        }
+
+        System.out.println("Stopped activity tracking for " + userKey);
     }
 }

@@ -1,16 +1,29 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 interface Case {
-  id: string;
+  id: number;
   title: string;
-  category: string;
+  description: string;
+  scenario: string;
+  doctorRole: string;
+  patientRole: string;
+  observerNotes: string;
+  learningObjectives: string;
+  difficulty: string;
+  duration: number;
   doctorNotes: string;
   patientNotes: string;
+  category: {
+    id: number;
+    name: string;
+    description?: string;
+  };
 }
 
 interface Category {
-  id: string;
+  id: number;
   name: string;
+  description?: string;
 }
 
 interface AdminState {
@@ -43,7 +56,7 @@ const adminSlice = createSlice({
         state.cases[index] = action.payload;
       }
     },
-    deleteCase: (state, action: PayloadAction<string>) => {
+    deleteCase: (state, action: PayloadAction<number>) => {
       state.cases = state.cases.filter((c) => c.id !== action.payload);
     },
     setCategories: (state, action: PayloadAction<Category[]>) => {
@@ -58,7 +71,7 @@ const adminSlice = createSlice({
         state.categories[index] = action.payload;
       }
     },
-    deleteCategory: (state, action: PayloadAction<string>) => {
+    deleteCategory: (state, action: PayloadAction<number>) => {
       state.categories = state.categories.filter((c) => c.id !== action.payload);
     },
     setLoading: (state, action: PayloadAction<boolean>) => {

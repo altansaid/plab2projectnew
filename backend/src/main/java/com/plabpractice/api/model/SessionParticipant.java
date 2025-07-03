@@ -28,6 +28,15 @@ public class SessionParticipant {
     @Column(nullable = false)
     private Role role;
 
+    @Column(nullable = true)
+    private Boolean isActive = true;
+
+    @Column(nullable = false)
+    private Boolean hasCompleted = false;
+
+    @Column(nullable = false)
+    private Boolean hasGivenFeedback = false;
+
     public enum Role {
         HOST,
         PARTICIPANT,

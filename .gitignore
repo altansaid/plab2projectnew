@@ -97,4 +97,7 @@ setup-postgresql-with-passwords.sql
 *-credentials.sql
 .env*
 !.env.example
-!.env.template 
+!.env.template
+
+# Database scripts
+*.sql 

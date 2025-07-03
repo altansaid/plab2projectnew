@@ -59,9 +59,14 @@ const App: React.FC = () => {
           </Route>
 
           {/* Admin routes */}
-          <Route element={<AdminRoute />}>
-            <Route path="admin" element={<AdminPanel />} />
-          </Route>
+          <Route
+            path="admin"
+            element={
+              <AdminRoute>
+                <AdminPanel />
+              </AdminRoute>
+            }
+          />
 
           {/* Catch all */}
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -3,7 +3,11 @@ package com.plabpractice.api.model;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 
 @Data
 @NoArgsConstructor
@@ -27,72 +31,50 @@ public class Feedback {
     private User recipient;
 
     @Column(nullable = false)
-    private String comment;
+    private String comment; // Additional Comment
 
     @Column(nullable = false)
-    private Integer score; // Overall score (1-5)
+    private Double overallPerformance; // Calculated from criteria scores (1.0-5.0)
+
+    @Column(name = "score", nullable = false)
+    private Integer score; // Legacy score column (mapped from overallPerformance)
 
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    // Additional detailed scoring fields
-    @Column(name = "clinical_management_score")
-    private Integer clinicalManagementScore;
+    // Case-specific feedback scores stored as JSON
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private List<FeedbackScore> criteriaScores;
 
-    @Column(name = "communication_score")
-    private Integer communicationScore;
+    @Data
+    @NoArgsConstructor
+    public static class FeedbackScore {
+        private String criterionId;
+        private String criterionName;
+        private Double score; // Can be null if it has sub-criteria
+        private List<FeedbackSubScore> subScores;
 
-    @Column(name = "professionalism_score")
-    private Integer professionalismScore;
+        public FeedbackScore(String criterionId, String criterionName, Double score, List<FeedbackSubScore> subScores) {
+            this.criterionId = criterionId;
+            this.criterionName = criterionName;
+            this.score = score;
+            this.subScores = subScores;
+        }
+    }
 
-    @Column(name = "empathy_score")
-    private Integer empathyScore;
+    @Data
+    @NoArgsConstructor
+    public static class FeedbackSubScore {
+        private String subCriterionId;
+        private String subCriterionName;
+        private Double score; // 1.0-5.0
 
-    @Column(name = "examination_skills_score")
-    private Integer examinationSkillsScore;
+        public FeedbackSubScore(String subCriterionId, String subCriterionName, Double score) {
+            this.subCriterionId = subCriterionId;
+            this.subCriterionName = subCriterionName;
+            this.score = score;
+        }
+    }
 
-    @Column(name = "diagnosis_accuracy_score")
-    private Integer diagnosisAccuracyScore;
-
-    @Column(name = "treatment_plan_score")
-    private Integer treatmentPlanScore;
-
-    @Column(name = "data_gathering_score")
-    private Integer dataGatheringScore;
-
-    @Column(name = "interpersonal_skills_score")
-    private Integer interpersonalSkillsScore;
-
-    @Column(name = "time_management_score")
-    private Integer timeManagementScore;
-
-    @Column(name = "patient_safety_score")
-    private Integer patientSafetyScore;
-
-    @Column(name = "decision_making_score")
-    private Integer decisionMakingScore;
-
-    @Column(name = "problem_solving_score")
-    private Integer problemSolvingScore;
-
-    @Column(name = "documentation_score")
-    private Integer documentationScore;
-
-    @Column(name = "teamwork_score")
-    private Integer teamworkScore;
-
-    @Column(name = "leadership_score")
-    private Integer leadershipScore;
-
-    @Column(name = "cultural_sensitivity_score")
-    private Integer culturalSensitivityScore;
-
-    @Column(name = "ethical_awareness_score")
-    private Integer ethicalAwarenessScore;
-
-    @Column(name = "patient_rapport_score")
-    private Integer patientRapportScore;
-
-    @Column(name = "confidence_score")
-    private Integer confidenceScore;
 }

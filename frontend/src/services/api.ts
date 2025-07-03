@@ -238,6 +238,23 @@ export const getSessionByCode = (sessionCode: string) =>
 export const skipPhase = (sessionCode: string) =>
   api.post(`/sessions/${sessionCode}/skip-phase`);
 
+export const completeSession = async (sessionCode: string) => {
+  const response = await fetch(`${API_URL}/sessions/${sessionCode}/complete`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Failed to complete session');
+  }
+
+  return response.json();
+};
+
 export const leaveSession = (sessionCode: string) =>
   api.post(`/sessions/${sessionCode}/leave`);
 
@@ -246,6 +263,9 @@ export const getActiveSessions = () =>
 
 export const getUserSessions = () =>
   api.get('/sessions/user');
+
+export const getUserActiveSessions = () =>
+  api.get('/sessions/user/active');
 
 // Cases API
 export const getAllCases = () =>
@@ -263,15 +283,53 @@ export const getCasesByTopics = (topics: string[]) =>
 export const getRandomCase = (topics?: string[]) =>
   api.get(`/cases/random${topics ? `?topics=${topics.join(',')}` : ''}`);
 
+export const requestNewCase = (sessionCode: string) =>
+  api.post(`/sessions/${sessionCode}/new-case`);
+
 export const getCategories = () =>
   api.get('/cases/categories');
 
 // Feedback API
-export const submitFeedback = (feedbackData: {
-  sessionCode: string;
+export const submitFeedback = async (sessionCode: string, feedbackData: {
   comment: string;
-  rating: number;
-}) => api.post('/feedback/submit', feedbackData);
+  criteriaScores: Array<{
+    criterionId: string;
+    criterionName: string;
+    score: number | null;
+    subScores: Array<{
+      subCriterionId: string;
+      subCriterionName: string;
+      score: number | null;
+    }>;
+  }>;
+}) => {
+  try {
+    const payload = {
+      sessionCode,
+      ...feedbackData
+    };
+    console.log('🚀 Submitting feedback to API:');
+    console.log('   sessionCode:', sessionCode);
+    console.log('   feedbackData:', JSON.stringify(feedbackData, null, 2));
+    console.log('   final payload:', JSON.stringify(payload, null, 2));
+    
+    const response = await api.post('/feedback/submit', payload);
+    console.log('✅ Feedback submitted successfully:', response.data);
+    return response;
+  } catch (error: any) {
+    console.error('❌ Detailed feedback submission error:');
+    console.error('   message:', error.message);
+    console.error('   status:', error.response?.status);
+    console.error('   statusText:', error.response?.statusText);
+    console.error('   response data:', JSON.stringify(error.response?.data, null, 2));
+    console.error('   request config:', {
+      url: error.config?.url,
+      method: error.config?.method,
+      data: error.config?.data
+    });
+    throw error;
+  }
+};
 
 export const getReceivedFeedback = () =>
   api.get('/feedback/received');
