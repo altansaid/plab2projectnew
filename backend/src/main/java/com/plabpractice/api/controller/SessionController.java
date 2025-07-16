@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/sessions")
@@ -219,27 +220,52 @@ public class SessionController {
 
     @PostMapping("/{sessionCode}/configure")
     public ResponseEntity<?> configureSession(@PathVariable String sessionCode,
-            @RequestBody Map<String, Object> config,
-            Authentication auth) {
+            @RequestBody Map<String, Object> config, Authentication auth) {
         try {
             User user = userRepository.findByEmail(auth.getName())
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
-            // Get random case based on topics if specified
-            @SuppressWarnings("unchecked")
-            List<String> selectedTopics = (List<String>) config.get("selectedTopics");
-            Case selectedCase = null;
+            // Get session first to check if it already has a case
+            Session existingSession = sessionService.findSessionByCode(sessionCode)
+                    .orElseThrow(() -> new RuntimeException("Session not found"));
 
-            if (selectedTopics != null && !selectedTopics.isEmpty()) {
-                if (selectedTopics.contains("Random")) {
-                    List<Case> allCases = caseRepository.findAll();
-                    if (!allCases.isEmpty()) {
-                        selectedCase = allCases.get((int) (Math.random() * allCases.size()));
+            // Get random case based on topics if specified AND if no case is already
+            // selected
+            Case selectedCase = existingSession.getSelectedCase(); // Use existing case if available
+
+            if (selectedCase == null) {
+                // Only select a new case if one isn't already assigned
+                String sessionType = (String) config.get("sessionType");
+
+                if ("RECALL".equals(sessionType)) {
+                    // Handle recall mode case selection
+                    String recallDate = (String) config.get("recallDate");
+                    if (recallDate != null && !recallDate.isEmpty()) {
+                        List<Case> allRecallCases = caseRepository.findByIsRecallCaseTrue();
+                        List<Case> filteredCases = allRecallCases.stream()
+                                .filter(c -> c.getRecallDates() != null && c.getRecallDates().contains(recallDate))
+                                .collect(Collectors.toList());
+                        if (!filteredCases.isEmpty()) {
+                            selectedCase = filteredCases.get((int) (Math.random() * filteredCases.size()));
+                        }
                     }
                 } else {
-                    List<Case> topicCases = caseRepository.findByCategoryNameIn(selectedTopics);
-                    if (!topicCases.isEmpty()) {
-                        selectedCase = topicCases.get((int) (Math.random() * topicCases.size()));
+                    // Handle topic-based case selection (existing logic)
+                    @SuppressWarnings("unchecked")
+                    List<String> selectedTopics = (List<String>) config.get("selectedTopics");
+
+                    if (selectedTopics != null && !selectedTopics.isEmpty()) {
+                        if (selectedTopics.contains("Random")) {
+                            List<Case> allCases = caseRepository.findAll();
+                            if (!allCases.isEmpty()) {
+                                selectedCase = allCases.get((int) (Math.random() * allCases.size()));
+                            }
+                        } else {
+                            List<Case> topicCases = caseRepository.findByCategoryNameIn(selectedTopics);
+                            if (!topicCases.isEmpty()) {
+                                selectedCase = topicCases.get((int) (Math.random() * topicCases.size()));
+                            }
+                        }
                     }
                 }
             }
@@ -336,10 +362,28 @@ public class SessionController {
             Session session = sessionService.findSessionByCode(sessionCode)
                     .orElseThrow(() -> new RuntimeException("Session not found"));
 
-            // Get a new random case based on session topics
-            List<String> topics = session.getSelectedTopics() != null ? List.of(session.getSelectedTopics().split(","))
-                    : List.of("Random");
-            Case newCase = sessionService.getRandomCase(topics);
+            // Get a new random case based on the current case's category
+            Case currentCase = session.getSelectedCase();
+            if (currentCase == null || currentCase.getCategory() == null) {
+                throw new RuntimeException("No category information available");
+            }
+
+            // Get all cases in the same category
+            List<Case> categoryCases = caseRepository.findByCategoryId(currentCase.getCategory().getId());
+            if (categoryCases.isEmpty()) {
+                throw new RuntimeException("No cases available in the current category");
+            }
+
+            // Select a random case from the category (different from the current one)
+            Case newCase;
+            if (categoryCases.size() > 1) {
+                do {
+                    newCase = categoryCases.get((int) (Math.random() * categoryCases.size()));
+                } while (newCase.getId().equals(currentCase.getId()));
+            } else {
+                // If there's only one case in the category, use it
+                newCase = categoryCases.get(0);
+            }
 
             // Update session with new case
             session.setSelectedCase(newCase);
@@ -446,6 +490,54 @@ public class SessionController {
         }
     }
 
+    @GetMapping("/{sessionCode}/observer-feedback-status")
+    public ResponseEntity<?> getObserverFeedbackStatus(@PathVariable String sessionCode, Authentication auth) {
+        try {
+            User user = userRepository.findByEmail(auth.getName())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            Session session = sessionRepository.findByCode(sessionCode)
+                    .orElseThrow(() -> new RuntimeException("Session not found"));
+
+            // Check if user is a participant in this session
+            if (!sessionParticipantRepository.existsBySessionIdAndUserId(session.getId(), user.getId())) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "You are not a participant in this session");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            // Check if there's an active observer in the session
+            List<SessionParticipant> observers = sessionParticipantRepository
+                    .findBySessionIdAndRole(session.getId(), SessionParticipant.Role.OBSERVER)
+                    .stream()
+                    .filter(SessionParticipant::getIsActive)
+                    .collect(Collectors.toList());
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("hasObserver", !observers.isEmpty());
+
+            if (!observers.isEmpty()) {
+                // Check if any observer has given feedback for the current round
+                boolean observerHasGivenFeedback = observers.stream()
+                        .anyMatch(observer -> sessionService.hasUserGivenFeedbackForCurrentRound(sessionCode,
+                                observer.getUser()));
+
+                response.put("observerHasGivenFeedback", observerHasGivenFeedback);
+                response.put("observerCount", observers.size());
+            } else {
+                response.put("observerHasGivenFeedback", true); // No observer means no blocking
+                response.put("observerCount", 0);
+            }
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to check observer feedback status: " + e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+    }
+
     @GetMapping("/{sessionCode}")
     public ResponseEntity<?> getSessionByCode(@PathVariable String sessionCode, Authentication auth) {
         try {
@@ -503,17 +595,29 @@ public class SessionController {
                     filteredCase.put("id", selectedCase.getId());
                     // Don't include title for doctors
                     filteredCase.put("description", selectedCase.getDescription());
-                    filteredCase.put("scenario", selectedCase.getScenario());
+
+                    // Create a proper category object
+                    Map<String, Object> category = new HashMap<>();
+                    category.put("id", selectedCase.getCategory().getId());
+                    category.put("name", selectedCase.getCategory().getName());
+                    filteredCase.put("category", category);
+
+                    // Add role-specific content based on participant role
+                    if (userRole == SessionParticipant.Role.DOCTOR) {
+                        filteredCase.put("scenario", selectedCase.getDoctorScenario());
+                        filteredCase.put("sections", selectedCase.getDoctorSections());
+                    } else {
+                        filteredCase.put("scenario", selectedCase.getPatientScenario());
+                        filteredCase.put("sections", selectedCase.getPatientSections());
+                    }
                     filteredCase.put("doctorRole", selectedCase.getDoctorRole());
                     filteredCase.put("patientRole", selectedCase.getPatientRole());
+                    filteredCase.put("observerNotes", selectedCase.getObserverNotes());
+                    filteredCase.put("learningObjectives", selectedCase.getLearningObjectives());
+                    filteredCase.put("duration", selectedCase.getDuration());
                     filteredCase.put("doctorNotes", selectedCase.getDoctorNotes());
                     filteredCase.put("patientNotes", selectedCase.getPatientNotes());
-                    filteredCase.put("observerNotes", selectedCase.getObserverNotes());
                     filteredCase.put("imageUrl", selectedCase.getImageUrl());
-                    filteredCase.put("category", selectedCase.getCategory());
-                    filteredCase.put("difficulty", selectedCase.getDifficulty());
-                    filteredCase.put("duration", selectedCase.getDuration());
-                    filteredCase.put("sections", selectedCase.getSections());
                     filteredCase.put("feedbackCriteria", selectedCase.getFeedbackCriteria());
                     response.put("selectedCase", filteredCase);
                 } else {
@@ -633,8 +737,10 @@ public class SessionController {
             User user = userRepository.findByEmail(auth.getName())
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
-            // Get user's active sessions (CREATED or IN_PROGRESS)
-            List<SessionParticipant> userParticipations = sessionParticipantRepository.findByUserId(user.getId());
+            // Get user's active sessions (CREATED or IN_PROGRESS) where the participant is
+            // still active
+            List<SessionParticipant> userParticipations = sessionParticipantRepository
+                    .findByUserIdAndIsActive(user.getId(), true);
             List<Session> activeSessions = userParticipations.stream()
                     .map(SessionParticipant::getSession)
                     .filter(session -> session.getStatus() == Session.Status.CREATED ||
@@ -659,7 +765,7 @@ public class SessionController {
                         sessionData.put("userRole", userRole != null ? userRole.toString() : null);
                         sessionData.put("isHost", isHost);
 
-                        // Get participant count
+                        // Get active participant count
                         int participantCount = sessionService.getSessionParticipants(session.getId()).size();
                         sessionData.put("participantCount", participantCount);
 

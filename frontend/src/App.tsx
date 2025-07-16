@@ -21,7 +21,14 @@ const App: React.FC = () => {
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
 
   return (
-    <Box sx={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+    <Box
+      sx={{
+        width: "100%",
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       <Routes>
         <Route path="/" element={<Layout />}>
           {/* Public routes */}

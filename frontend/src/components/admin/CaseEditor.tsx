@@ -30,7 +30,9 @@ import {
   CloudUpload as UploadIcon,
   Image as ImageIcon,
   Delete,
+  CalendarToday as CalendarIcon,
 } from "@mui/icons-material";
+import { api } from "../../services/api";
 
 interface CaseSection {
   id: string;
@@ -53,23 +55,37 @@ interface FeedbackCriterion {
   subCriteria: FeedbackSubCriterion[];
 }
 
+interface CaseVisualData {
+  type: "image" | "text";
+  content: string; // URL for image, text content for text type
+}
+
 interface CaseData {
   id?: number;
   title: string;
   description: string;
   category: any;
-  scenario?: string;
+  // Doctor role specific content
+  doctorDescription?: string;
+  doctorScenario?: string;
+  doctorSections: CaseSection[];
+  // Patient/Observer role specific content
+  patientDescription?: string;
+  patientScenario?: string;
+  patientSections: CaseSection[];
+  // Common fields
   doctorRole?: string;
   patientRole?: string;
   observerNotes?: string;
   learningObjectives?: string;
-  difficulty?: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
   duration?: number;
   doctorNotes?: string;
   patientNotes?: string;
-  imageUrl?: string;
-  sections: CaseSection[];
+  visualData?: CaseVisualData;
   feedbackCriteria: FeedbackCriterion[];
+  imageUrl?: string; // Backward compatibility
+  isRecallCase?: boolean;
+  recallDates?: string[];
 }
 
 interface CaseEditorProps {
@@ -91,8 +107,16 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
     title: "",
     description: "",
     category: null,
-    sections: [],
+    doctorDescription: "",
+    doctorScenario: "",
+    doctorSections: [],
+    patientDescription: "",
+    patientScenario: "",
+    patientSections: [],
+    visualData: { type: "image", content: "" },
     feedbackCriteria: [],
+    isRecallCase: false,
+    recallDates: [],
   });
 
   const [uploading, setUploading] = useState(false);
@@ -101,18 +125,40 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
 
   useEffect(() => {
     if (caseData) {
+      // Handle backward compatibility with cases that might only have imageUrl
+      let visualData = caseData.visualData;
+      if (!visualData && caseData.imageUrl) {
+        // Convert old imageUrl to new visualData format
+        visualData = { type: "image", content: caseData.imageUrl };
+      } else if (!visualData) {
+        // Default to empty image type
+        visualData = { type: "image", content: "" };
+      }
+
       setFormData({
         ...caseData,
-        sections: caseData.sections || [],
+        doctorSections: caseData.doctorSections || [],
+        patientSections: caseData.patientSections || [],
         feedbackCriteria: caseData.feedbackCriteria || [],
+        visualData: visualData,
+        isRecallCase: caseData.isRecallCase || false,
+        recallDates: caseData.recallDates || [],
       });
     } else {
       setFormData({
         title: "",
         description: "",
         category: null,
-        sections: [],
+        doctorDescription: "",
+        doctorScenario: "",
+        doctorSections: [],
+        patientDescription: "",
+        patientScenario: "",
+        patientSections: [],
+        visualData: { type: "image", content: "" },
         feedbackCriteria: [],
+        isRecallCase: false,
+        recallDates: [],
       });
     }
     // Reset error states when opening/closing modal or changing case data
@@ -205,7 +251,10 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
         const result = await response.json();
 
         if (response.ok) {
-          handleBasicFieldChange("imageUrl", result.url);
+          handleBasicFieldChange("visualData", {
+            type: "image",
+            content: result.url,
+          });
           setImageError(false); // Reset error state on successful upload
         } else {
           setUploadError(result.error || "Error occurred while uploading file");
@@ -229,77 +278,86 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
     img.src = objectUrl;
   };
 
-  const addSection = () => {
+  const addSection = (type: "doctor" | "patient") => {
     const newSection: CaseSection = {
       id: `section-${Date.now()}`,
       title: "",
       content: "",
-      order: formData.sections.length,
+      order:
+        type === "doctor"
+          ? formData.doctorSections.length
+          : formData.patientSections.length,
     };
     setFormData((prev) => ({
       ...prev,
-      sections: [...prev.sections, newSection],
+      [type === "doctor" ? "doctorSections" : "patientSections"]: [
+        ...(type === "doctor" ? prev.doctorSections : prev.patientSections),
+        newSection,
+      ],
     }));
   };
 
   const updateSection = (
+    type: "doctor" | "patient",
     sectionId: string,
     field: keyof CaseSection,
     value: any
   ) => {
     setFormData((prev) => ({
       ...prev,
-      sections: prev.sections.map((section) =>
+      [type === "doctor" ? "doctorSections" : "patientSections"]: (type ===
+      "doctor"
+        ? prev.doctorSections
+        : prev.patientSections
+      ).map((section) =>
         section.id === sectionId ? { ...section, [field]: value } : section
       ),
     }));
   };
 
-  const deleteSection = (sectionId: string) => {
+  const deleteSection = (type: "doctor" | "patient", sectionId: string) => {
     setFormData((prev) => ({
       ...prev,
-      sections: prev.sections.filter((section) => section.id !== sectionId),
+      [type === "doctor" ? "doctorSections" : "patientSections"]: (type ===
+      "doctor"
+        ? prev.doctorSections
+        : prev.patientSections
+      ).filter((section) => section.id !== sectionId),
     }));
   };
 
-  const handleSave = async () => {
-    try {
-      await onSave(formData);
-      onClose();
-    } catch (error) {
-      console.error("Failed to save case:", error);
-    }
-  };
-
-  const moveSection = (sectionId: string, direction: "up" | "down") => {
-    const currentSections = [...formData.sections];
-    const currentIndex = currentSections.findIndex(
-      (section) => section.id === sectionId
-    );
-
+  const moveSection = (
+    type: "doctor" | "patient",
+    sectionId: string,
+    direction: "up" | "down"
+  ) => {
+    const sections =
+      type === "doctor" ? formData.doctorSections : formData.patientSections;
+    const sectionIndex = sections.findIndex((s) => s.id === sectionId);
     if (
-      (direction === "up" && currentIndex > 0) ||
-      (direction === "down" && currentIndex < currentSections.length - 1)
+      (direction === "up" && sectionIndex === 0) ||
+      (direction === "down" && sectionIndex === sections.length - 1)
     ) {
-      const targetIndex =
-        direction === "up" ? currentIndex - 1 : currentIndex + 1;
-
-      // Swap sections
-      [currentSections[currentIndex], currentSections[targetIndex]] = [
-        currentSections[targetIndex],
-        currentSections[currentIndex],
-      ];
-
-      // Update order values
-      currentSections.forEach((section, index) => {
-        section.order = index;
-      });
-
-      setFormData((prev) => ({
-        ...prev,
-        sections: currentSections,
-      }));
+      return;
     }
+
+    const newSections = [...sections];
+    const targetIndex =
+      direction === "up" ? sectionIndex - 1 : sectionIndex + 1;
+    [newSections[sectionIndex], newSections[targetIndex]] = [
+      newSections[targetIndex],
+      newSections[sectionIndex],
+    ];
+
+    // Update order values
+    newSections.forEach((section, index) => {
+      section.order = index;
+    });
+
+    setFormData((prev) => ({
+      ...prev,
+      [type === "doctor" ? "doctorSections" : "patientSections"]: newSections,
+    }));
   };
 
   // Feedback Criteria Management Functions
@@ -424,91 +482,523 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
     updateFeedbackCriterion(criterionId, "subCriteria", updatedSubCriteria);
   };
 
+  const handleSave = async () => {
+    try {
+      await onSave(formData);
+      onClose();
+    } catch (error) {
+      console.error("Failed to save case:", error);
+    }
+  };
+
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="lg"
-      fullWidth
-      sx={{ "& .MuiDialog-paper": { height: "90vh" } }}
-    >
-      <DialogTitle>
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">
-            {caseData?.id ? "Edit Case" : "Add New Case"}
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<SaveIcon />}
-            onClick={handleSave}
-          >
-            Save Case
-          </Button>
-        </Box>
-      </DialogTitle>
+    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
+      <DialogTitle>{caseData ? "Edit Case" : "Create New Case"}</DialogTitle>
+      <DialogContent>
+        <Box sx={{ mt: 2 }}>
+          {/* Basic Information */}
+          <Card sx={{ mb: 4 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Basic Information
+              </Typography>
+              <Box display="flex" flexDirection="column" gap={2}>
+                <TextField
+                  fullWidth
+                  label="Case Title"
+                  value={formData.title}
+                  onChange={(e) =>
+                    handleBasicFieldChange("title", e.target.value)
+                  }
+                  required
+                />
 
-      <DialogContent sx={{ overflow: "auto", p: 3 }}>
-        {/* Basic Information */}
-        <Card sx={{ mb: 3 }}>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Basic Information
-            </Typography>
-            <Box display="flex" flexDirection="column" gap={2}>
-              <TextField
-                fullWidth
-                label="Case Title"
-                value={formData.title}
-                onChange={(e) =>
-                  handleBasicFieldChange("title", e.target.value)
-                }
-                required
-              />
+                <FormControl fullWidth required>
+                  <InputLabel>Category</InputLabel>
+                  <Select
+                    value={formData.category?.id || ""}
+                    onChange={(e) =>
+                      handleBasicFieldChange(
+                        "category",
+                        categories.find((c) => c.id === e.target.value)
+                      )
+                    }
+                    label="Category"
+                  >
+                    {categories.map((category) => (
+                      <MenuItem key={category.id} value={category.id}>
+                        {category.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
 
-              <TextField
-                fullWidth
-                multiline
-                rows={2}
-                label="Description"
-                value={formData.description}
-                onChange={(e) =>
-                  handleBasicFieldChange("description", e.target.value)
-                }
-              />
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Duration (minutes)"
+                  value={formData.duration || ""}
+                  onChange={(e) =>
+                    handleBasicFieldChange("duration", parseInt(e.target.value))
+                  }
+                  InputProps={{ inputProps: { min: 1, max: 60 } }}
+                />
+              </Box>
+            </CardContent>
+          </Card>
 
-              <FormControl sx={{ minWidth: 200 }}>
-                <InputLabel>Category</InputLabel>
-                <Select
-                  value={formData.category?.id || ""}
-                  onChange={(e) => {
-                    const selectedCategory = categories.find(
-                      (cat) => cat.id === e.target.value
-                    );
-                    handleBasicFieldChange("category", selectedCategory);
-                  }}
-                >
-                  {categories.map((category) => (
-                    <MenuItem key={category.id} value={category.id}>
-                      {category.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+          {/* Recall Settings */}
+          <Card sx={{ mb: 4 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Recall Settings
+              </Typography>
+              <Box display="flex" flexDirection="column" gap={2}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={formData.isRecallCase || false}
+                      onChange={(e) =>
+                        handleBasicFieldChange("isRecallCase", e.target.checked)
+                      }
+                    />
+                  }
+                  label="Mark this case for recall practice"
+                />
 
-              {/* Image Upload Section */}
-              <Box>
+                {formData.isRecallCase && (
+                  <Box>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Recall Dates
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      paragraph
+                    >
+                      Select the dates when this case should be available for
+                      recall practice. You can add multiple dates.
+                    </Typography>
+
+                    <Box display="flex" alignItems="center" gap={2} mb={2}>
+                      <TextField
+                        type="date"
+                        label="Add Recall Date"
+                        InputLabelProps={{ shrink: true }}
+                        onChange={(e) => {
+                          const date = e.target.value;
+                          if (date && !formData.recallDates?.includes(date)) {
+                            handleBasicFieldChange("recallDates", [
+                              ...(formData.recallDates || []),
+                              date,
+                            ]);
+                          }
+                        }}
+                        value=""
+                      />
+                      <Button
+                        variant="outlined"
+                        startIcon={<CalendarIcon />}
+                        onClick={() => {
+                          // This could be enhanced with a date picker library
+                        }}
+                      >
+                        Add Date
+                      </Button>
+                    </Box>
+
+                    {formData.recallDates &&
+                      formData.recallDates.length > 0 && (
+                        <Box>
+                          <Typography variant="subtitle2" gutterBottom>
+                            Selected Dates:
+                          </Typography>
+                          <Box display="flex" flexWrap="wrap" gap={1}>
+                            {formData.recallDates.map((date, index) => {
+                              // Format date without timezone issues
+                              const formatDateLocal = (dateStr: string) => {
+                                const [year, month, day] = dateStr.split("-");
+                                return new Date(
+                                  parseInt(year),
+                                  parseInt(month) - 1,
+                                  parseInt(day)
+                                ).toLocaleDateString();
+                              };
+
+                              return (
+                                <Chip
+                                  key={index}
+                                  label={formatDateLocal(date)}
+                                  onDelete={() => {
+                                    const updatedDates =
+                                      formData.recallDates?.filter(
+                                        (d) => d !== date
+                                      );
+                                    handleBasicFieldChange(
+                                      "recallDates",
+                                      updatedDates
+                                    );
+                                  }}
+                                  deleteIcon={<DeleteIcon />}
+                                />
+                              );
+                            })}
+                          </Box>
+                        </Box>
+                      )}
+                  </Box>
+                )}
+              </Box>
+            </CardContent>
+          </Card>
+
+          {/* Doctor's View */}
+          <Card sx={{ mb: 4 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Doctor's View
+              </Typography>
+              <Box display="flex" flexDirection="column" gap={2}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={4}
+                  label="Description (Doctor's View)"
+                  value={formData.doctorDescription || ""}
+                  onChange={(e) =>
+                    handleBasicFieldChange("doctorDescription", e.target.value)
+                  }
+                  placeholder="Enter the case description from doctor's perspective..."
+                />
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={4}
+                  label="Scenario (Doctor's View)"
+                  value={formData.doctorScenario || ""}
+                  onChange={(e) =>
+                    handleBasicFieldChange("doctorScenario", e.target.value)
+                  }
+                  placeholder="Enter the scenario details from doctor's perspective..."
+                />
                 <Typography variant="subtitle2" gutterBottom>
-                  Patient Image
+                  Doctor's Sections
                 </Typography>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  display="block"
-                  mb={1}
+                <Button
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={() => addSection("doctor")}
                 >
-                  Visual representation of patient's symptoms or body region to
-                  show during consultation
+                  Add Doctor Section
+                </Button>
+                {formData.doctorSections.map((section, index) => (
+                  <Card
+                    key={section.id}
+                    variant="outlined"
+                    sx={{ mb: 2, border: "1px solid #e0e0e0" }}
+                  >
+                    <CardContent>
+                      <Box display="flex" alignItems="center" gap={1} mb={2}>
+                        <DragIcon sx={{ color: "#888", cursor: "grab" }} />
+                        <Typography variant="subtitle2" sx={{ mr: "auto" }}>
+                          Doctor Section {index + 1}
+                        </Typography>
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            moveSection("doctor", section.id, "up")
+                          }
+                          disabled={index === 0}
+                        >
+                          ↑
+                        </Button>
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            moveSection("doctor", section.id, "down")
+                          }
+                          disabled={
+                            index === formData.doctorSections.length - 1
+                          }
+                        >
+                          ↓
+                        </Button>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => deleteSection("doctor", section.id)}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
+                      <TextField
+                        fullWidth
+                        label="Section Title"
+                        value={section.title}
+                        onChange={(e) =>
+                          updateSection(
+                            "doctor",
+                            section.id,
+                            "title",
+                            e.target.value
+                          )
+                        }
+                        placeholder="e.g., Medical History, Examination Notes, etc."
+                        sx={{ mb: 2 }}
+                      />
+                      <TextField
+                        fullWidth
+                        multiline
+                        rows={4}
+                        label="Section Content"
+                        value={section.content}
+                        onChange={(e) =>
+                          updateSection(
+                            "doctor",
+                            section.id,
+                            "content",
+                            e.target.value
+                          )
+                        }
+                        placeholder="Enter the content for this section..."
+                      />
+                    </CardContent>
+                  </Card>
+                ))}
+              </Box>
+            </CardContent>
+          </Card>
+
+          {/* Patient/Observer's View */}
+          <Card sx={{ mb: 4 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Patient/Observer's View
+              </Typography>
+              <Box display="flex" flexDirection="column" gap={2}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={4}
+                  label="Description (Patient's View)"
+                  value={formData.patientDescription || ""}
+                  onChange={(e) =>
+                    handleBasicFieldChange("patientDescription", e.target.value)
+                  }
+                  placeholder="Enter the case description from patient's perspective..."
+                />
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={4}
+                  label="Scenario (Patient's View)"
+                  value={formData.patientScenario || ""}
+                  onChange={(e) =>
+                    handleBasicFieldChange("patientScenario", e.target.value)
+                  }
+                  placeholder="Enter the scenario details from patient's perspective..."
+                />
+                <Typography variant="subtitle2" gutterBottom>
+                  Patient's Sections
                 </Typography>
+                <Button
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={() => addSection("patient")}
+                >
+                  Add Patient Section
+                </Button>
+                {formData.patientSections.map((section, index) => (
+                  <Card
+                    key={section.id}
+                    variant="outlined"
+                    sx={{ mb: 2, border: "1px solid #e0e0e0" }}
+                  >
+                    <CardContent>
+                      <Box display="flex" alignItems="center" gap={1} mb={2}>
+                        <DragIcon sx={{ color: "#888", cursor: "grab" }} />
+                        <Typography variant="subtitle2" sx={{ mr: "auto" }}>
+                          Patient Section {index + 1}
+                        </Typography>
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            moveSection("patient", section.id, "up")
+                          }
+                          disabled={index === 0}
+                        >
+                          ↑
+                        </Button>
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            moveSection("patient", section.id, "down")
+                          }
+                          disabled={
+                            index === formData.patientSections.length - 1
+                          }
+                        >
+                          ↓
+                        </Button>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => deleteSection("patient", section.id)}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
+                      <TextField
+                        fullWidth
+                        label="Section Title"
+                        value={section.title}
+                        onChange={(e) =>
+                          updateSection(
+                            "patient",
+                            section.id,
+                            "title",
+                            e.target.value
+                          )
+                        }
+                        placeholder="e.g., Symptoms, Medical History, etc."
+                        sx={{ mb: 2 }}
+                      />
+                      <TextField
+                        fullWidth
+                        multiline
+                        rows={4}
+                        label="Section Content"
+                        value={section.content}
+                        onChange={(e) =>
+                          updateSection(
+                            "patient",
+                            section.id,
+                            "content",
+                            e.target.value
+                          )
+                        }
+                        placeholder="Enter the content for this section..."
+                      />
+                    </CardContent>
+                  </Card>
+                ))}
+              </Box>
+            </CardContent>
+          </Card>
+
+          {/* Common Information */}
+          <Card sx={{ mb: 4 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Common Information
+              </Typography>
+              <Box display="flex" flexDirection="column" gap={2}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  label="Doctor Role"
+                  value={formData.doctorRole || ""}
+                  onChange={(e) =>
+                    handleBasicFieldChange("doctorRole", e.target.value)
+                  }
+                  placeholder="Describe the doctor's role in this case..."
+                />
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  label="Patient Role"
+                  value={formData.patientRole || ""}
+                  onChange={(e) =>
+                    handleBasicFieldChange("patientRole", e.target.value)
+                  }
+                  placeholder="Describe the patient's role in this case..."
+                />
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  label="Observer Notes"
+                  value={formData.observerNotes || ""}
+                  onChange={(e) =>
+                    handleBasicFieldChange("observerNotes", e.target.value)
+                  }
+                  placeholder="Add notes for observers..."
+                />
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  label="Learning Objectives"
+                  value={formData.learningObjectives || ""}
+                  onChange={(e) =>
+                    handleBasicFieldChange("learningObjectives", e.target.value)
+                  }
+                  placeholder="List the learning objectives for this case..."
+                />
+              </Box>
+            </CardContent>
+          </Card>
+
+          {/* Visual Information Section */}
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>
+              Visual Information
+            </Typography>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              display="block"
+              mb={1}
+            >
+              Add visual information or text details about the patient's
+              condition
+            </Typography>
+
+            <FormControl component="fieldset" sx={{ mb: 2 }}>
+              <Box display="flex" gap={2}>
+                <Button
+                  variant={
+                    formData.visualData?.type === "image"
+                      ? "contained"
+                      : "outlined"
+                  }
+                  onClick={() =>
+                    handleBasicFieldChange("visualData", {
+                      type: "image",
+                      content:
+                        formData.visualData?.type === "image"
+                          ? formData.visualData.content
+                          : "",
+                    })
+                  }
+                >
+                  Image
+                </Button>
+                <Button
+                  variant={
+                    formData.visualData?.type === "text"
+                      ? "contained"
+                      : "outlined"
+                  }
+                  onClick={() =>
+                    handleBasicFieldChange("visualData", {
+                      type: "text",
+                      content:
+                        formData.visualData?.type === "text"
+                          ? formData.visualData.content
+                          : "",
+                    })
+                  }
+                >
+                  Text
+                </Button>
+              </Box>
+            </FormControl>
+
+            {formData.visualData?.type === "image" ? (
+              <>
                 <Typography
                   variant="caption"
                   color="text.secondary"
@@ -545,7 +1035,7 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
                     />
                   </Button>
 
-                  {formData.imageUrl && (
+                  {formData.visualData?.content && (
                     <>
                       <Chip
                         icon={<ImageIcon />}
@@ -557,7 +1047,10 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
                         size="small"
                         startIcon={<Delete />}
                         onClick={() => {
-                          handleBasicFieldChange("imageUrl", "");
+                          handleBasicFieldChange("visualData", {
+                            type: "image",
+                            content: "",
+                          });
                           setImageError(false);
                         }}
                       >
@@ -578,17 +1071,17 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
                   </Typography>
                 )}
 
-                {formData.imageUrl && (
+                {formData.visualData?.content && (
                   <Box mt={2}>
                     {!imageError ? (
                       <img
                         src={
-                          formData.imageUrl?.startsWith("http")
-                            ? formData.imageUrl
+                          formData.visualData.content.startsWith("http")
+                            ? formData.visualData.content
                             : `${
                                 import.meta.env.VITE_API_URL ||
                                 "http://localhost:8080/api"
-                              }${formData.imageUrl}`
+                              }${formData.visualData.content}`
                         }
                         alt="Uploaded Image"
                         style={{
@@ -625,406 +1118,327 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
                     )}
                   </Box>
                 )}
-              </Box>
-            </Box>
-          </CardContent>
-        </Card>
-
-        {/* Modular Sections */}
-        <Card sx={{ mb: 3 }}>
-          <CardContent>
-            <Box
-              display="flex"
-              justifyContent="space-between"
-              alignItems="center"
-              mb={2}
-            >
-              <Typography variant="h6">Content Sections</Typography>
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={addSection}
-              >
-                Add Section
-              </Button>
-            </Box>
-
-            {formData.sections.length === 0 ? (
-              <Box
-                sx={{
-                  border: "2px dashed #ccc",
-                  borderRadius: 1,
-                  p: 4,
-                  textAlign: "center",
-                  bgcolor: "#f9f9f9",
-                }}
-              >
-                <Typography color="textSecondary" variant="body1">
-                  No sections added yet. Click "Add Section" to start building
-                  your case content.
-                </Typography>
-              </Box>
+              </>
             ) : (
-              formData.sections.map((section, index) => (
-                <Card
-                  key={section.id}
-                  variant="outlined"
-                  sx={{ mb: 2, border: "1px solid #e0e0e0" }}
-                >
-                  <CardContent>
-                    <Box display="flex" alignItems="center" gap={1} mb={2}>
-                      <DragIcon sx={{ color: "#888", cursor: "grab" }} />
-                      <Typography variant="subtitle2" sx={{ mr: "auto" }}>
-                        Section {index + 1}
-                      </Typography>
-
-                      <Button
-                        size="small"
-                        onClick={() => moveSection(section.id, "up")}
-                        disabled={index === 0}
-                      >
-                        ↑
-                      </Button>
-                      <Button
-                        size="small"
-                        onClick={() => moveSection(section.id, "down")}
-                        disabled={index === formData.sections.length - 1}
-                      >
-                        ↓
-                      </Button>
-
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => deleteSection(section.id)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </Box>
-
-                    <TextField
-                      fullWidth
-                      label="Section Title"
-                      value={section.title}
-                      onChange={(e) =>
-                        updateSection(section.id, "title", e.target.value)
-                      }
-                      placeholder="e.g., Doctor Information, Patient Background, etc."
-                      sx={{ mb: 2 }}
-                    />
-
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={4}
-                      label="Section Content"
-                      value={section.content}
-                      onChange={(e) =>
-                        updateSection(section.id, "content", e.target.value)
-                      }
-                      placeholder="Enter the content for this section..."
-                    />
-                  </CardContent>
-                </Card>
-              ))
+              <TextField
+                fullWidth
+                multiline
+                rows={4}
+                label="Text Information"
+                value={formData.visualData?.content || ""}
+                onChange={(e) =>
+                  handleBasicFieldChange("visualData", {
+                    type: "text",
+                    content: e.target.value,
+                  })
+                }
+                placeholder="Enter additional information about the patient's condition..."
+              />
             )}
-          </CardContent>
-        </Card>
+          </Box>
 
-        {/* Feedback Criteria */}
-        <Card sx={{ mb: 3 }}>
-          <CardContent>
-            <Box
-              display="flex"
-              justifyContent="space-between"
-              alignItems="center"
-              mb={2}
-            >
-              <Typography variant="h6">Feedback Criteria</Typography>
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={addFeedbackCriterion}
+          {/* Feedback Criteria */}
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Box
+                display="flex"
+                justifyContent="space-between"
+                alignItems="center"
+                mb={2}
               >
-                Add Criterion
-              </Button>
-            </Box>
+                <Typography variant="h6">Feedback Criteria</Typography>
+                <Button
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={addFeedbackCriterion}
+                >
+                  Add Criterion
+                </Button>
+              </Box>
 
-            {/* Overall Performance Info */}
-            <Box
-              sx={{
-                bgcolor: "#f5f5f5",
-                border: "1px solid #e0e0e0",
-                borderRadius: 1,
-                p: 2,
-                mb: 2,
-              }}
-            >
-              <Typography
-                variant="subtitle2"
-                sx={{ fontWeight: "bold", mb: 1 }}
-              >
-                Overall Performance
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                This will be automatically calculated as the average of all
-                defined criteria. If a criterion has sub-criteria, its score
-                will be the average of its sub-criteria.
-              </Typography>
-            </Box>
-
-            {/* Additional Comment Info */}
-            <Box
-              sx={{
-                bgcolor: "#e3f2fd",
-                border: "1px solid #bbdefb",
-                borderRadius: 1,
-                p: 2,
-                mb: 2,
-              }}
-            >
-              <Typography
-                variant="subtitle2"
-                sx={{ fontWeight: "bold", mb: 1 }}
-              >
-                Additional Comment
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                This field will be automatically included in all feedback forms
-                for this case.
-              </Typography>
-            </Box>
-
-            {formData.feedbackCriteria.length === 0 ? (
+              {/* Overall Performance Info */}
               <Box
                 sx={{
-                  border: "2px dashed #ccc",
+                  bgcolor: "#f5f5f5",
+                  border: "1px solid #e0e0e0",
                   borderRadius: 1,
-                  p: 4,
-                  textAlign: "center",
-                  bgcolor: "#f9f9f9",
+                  p: 2,
+                  mb: 2,
                 }}
               >
-                <Typography color="textSecondary" variant="body1">
-                  No feedback criteria defined yet. Click "Add Criterion" to
-                  start creating your custom feedback structure.
+                <Typography
+                  variant="subtitle2"
+                  sx={{ fontWeight: "bold", mb: 1 }}
+                >
+                  Overall Performance
+                </Typography>
+                <Typography variant="body2" color="textSecondary">
+                  This will be automatically calculated as the average of all
+                  defined criteria. If a criterion has sub-criteria, its score
+                  will be the average of its sub-criteria.
                 </Typography>
               </Box>
-            ) : (
-              formData.feedbackCriteria.map((criterion, index) => (
-                <Card
-                  key={criterion.id}
-                  variant="outlined"
-                  sx={{ mb: 2, border: "1px solid #e0e0e0" }}
+
+              {/* Additional Comment Info */}
+              <Box
+                sx={{
+                  bgcolor: "#e3f2fd",
+                  border: "1px solid #bbdefb",
+                  borderRadius: 1,
+                  p: 2,
+                  mb: 2,
+                }}
+              >
+                <Typography
+                  variant="subtitle2"
+                  sx={{ fontWeight: "bold", mb: 1 }}
                 >
-                  <CardContent>
-                    <Box display="flex" alignItems="center" gap={1} mb={2}>
-                      <DragIcon sx={{ color: "#888", cursor: "grab" }} />
-                      <Typography variant="subtitle2" sx={{ mr: "auto" }}>
-                        Criterion {index + 1}
-                      </Typography>
+                  Additional Comment
+                </Typography>
+                <Typography variant="body2" color="textSecondary">
+                  This field will be automatically included in all feedback
+                  forms for this case.
+                </Typography>
+              </Box>
 
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          moveFeedbackCriterion(criterion.id, "up")
+              {formData.feedbackCriteria.length === 0 ? (
+                <Box
+                  sx={{
+                    border: "2px dashed #ccc",
+                    borderRadius: 1,
+                    p: 4,
+                    textAlign: "center",
+                    bgcolor: "#f9f9f9",
+                  }}
+                >
+                  <Typography color="textSecondary" variant="body1">
+                    No feedback criteria defined yet. Click "Add Criterion" to
+                    start creating your custom feedback structure.
+                  </Typography>
+                </Box>
+              ) : (
+                formData.feedbackCriteria.map((criterion, index) => (
+                  <Card
+                    key={criterion.id}
+                    variant="outlined"
+                    sx={{ mb: 2, border: "1px solid #e0e0e0" }}
+                  >
+                    <CardContent>
+                      <Box display="flex" alignItems="center" gap={1} mb={2}>
+                        <DragIcon sx={{ color: "#888", cursor: "grab" }} />
+                        <Typography variant="subtitle2" sx={{ mr: "auto" }}>
+                          Criterion {index + 1}
+                        </Typography>
+
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            moveFeedbackCriterion(criterion.id, "up")
+                          }
+                          disabled={index === 0}
+                        >
+                          ↑
+                        </Button>
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            moveFeedbackCriterion(criterion.id, "down")
+                          }
+                          disabled={
+                            index === formData.feedbackCriteria.length - 1
+                          }
+                        >
+                          ↓
+                        </Button>
+
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => deleteFeedbackCriterion(criterion.id)}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
+
+                      <TextField
+                        fullWidth
+                        label="Criterion Name"
+                        value={criterion.name}
+                        onChange={(e) =>
+                          updateFeedbackCriterion(
+                            criterion.id,
+                            "name",
+                            e.target.value
+                          )
                         }
-                        disabled={index === 0}
-                      >
-                        ↑
-                      </Button>
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          moveFeedbackCriterion(criterion.id, "down")
-                        }
-                        disabled={
-                          index === formData.feedbackCriteria.length - 1
-                        }
-                      >
-                        ↓
-                      </Button>
+                        placeholder="e.g., Communication Skills, Clinical Knowledge, etc."
+                        sx={{ mb: 2 }}
+                      />
 
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => deleteFeedbackCriterion(criterion.id)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </Box>
-
-                    <TextField
-                      fullWidth
-                      label="Criterion Name"
-                      value={criterion.name}
-                      onChange={(e) =>
-                        updateFeedbackCriterion(
-                          criterion.id,
-                          "name",
-                          e.target.value
-                        )
-                      }
-                      placeholder="e.g., Communication Skills, Clinical Knowledge, etc."
-                      sx={{ mb: 2 }}
-                    />
-
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={criterion.hasSubCriteria}
-                          onChange={(e) => {
-                            updateFeedbackCriterion(
-                              criterion.id,
-                              "hasSubCriteria",
-                              e.target.checked
-                            );
-                            if (!e.target.checked) {
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={criterion.hasSubCriteria}
+                            onChange={(e) => {
                               updateFeedbackCriterion(
                                 criterion.id,
-                                "subCriteria",
-                                []
+                                "hasSubCriteria",
+                                e.target.checked
                               );
-                            }
-                          }}
-                        />
-                      }
-                      label="Has Sub-Criteria"
-                      sx={{ mb: 2 }}
-                    />
-
-                    {criterion.hasSubCriteria && (
-                      <Box
-                        sx={{
-                          ml: 2,
-                          border: "1px solid #f0f0f0",
-                          borderRadius: 1,
-                          p: 2,
-                        }}
-                      >
-                        <Box
-                          display="flex"
-                          justifyContent="space-between"
-                          alignItems="center"
-                          mb={2}
-                        >
-                          <Typography variant="subtitle2">
-                            Sub-Criteria
-                          </Typography>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            startIcon={<AddIcon />}
-                            onClick={() => addSubCriterion(criterion.id)}
-                          >
-                            Add Sub-Criterion
-                          </Button>
-                        </Box>
-
-                        {criterion.subCriteria.length === 0 ? (
-                          <Typography
-                            variant="body2"
-                            color="textSecondary"
-                            sx={{ textAlign: "center", py: 2 }}
-                          >
-                            No sub-criteria defined. Add one to get started.
-                          </Typography>
-                        ) : (
-                          criterion.subCriteria.map(
-                            (subCriterion, subIndex) => (
-                              <Box
-                                key={subCriterion.id}
-                                sx={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 1,
-                                  mb: 1,
-                                  p: 1,
-                                  border: "1px solid #e8e8e8",
-                                  borderRadius: 1,
-                                  bgcolor: "#fafafa",
-                                }}
-                              >
-                                <Typography
-                                  variant="caption"
-                                  sx={{ minWidth: "60px" }}
-                                >
-                                  Sub {subIndex + 1}:
-                                </Typography>
-                                <TextField
-                                  size="small"
-                                  fullWidth
-                                  placeholder="Sub-criterion name"
-                                  value={subCriterion.name}
-                                  onChange={(e) =>
-                                    updateSubCriterion(
-                                      criterion.id,
-                                      subCriterion.id,
-                                      "name",
-                                      e.target.value
-                                    )
-                                  }
-                                />
-                                <IconButton
-                                  size="small"
-                                  color="error"
-                                  onClick={() =>
-                                    deleteSubCriterion(
-                                      criterion.id,
-                                      subCriterion.id
-                                    )
-                                  }
-                                >
-                                  <DeleteIcon fontSize="small" />
-                                </IconButton>
-                              </Box>
-                            )
-                          )
-                        )}
-
-                        {criterion.subCriteria.length > 0 && (
-                          <Box
-                            sx={{
-                              mt: 2,
-                              p: 1,
-                              bgcolor: "#fff3e0",
-                              borderRadius: 1,
+                              if (!e.target.checked) {
+                                updateFeedbackCriterion(
+                                  criterion.id,
+                                  "subCriteria",
+                                  []
+                                );
+                              }
                             }}
+                          />
+                        }
+                        label="Has Sub-Criteria"
+                        sx={{ mb: 2 }}
+                      />
+
+                      {criterion.hasSubCriteria && (
+                        <Box
+                          sx={{
+                            ml: 2,
+                            border: "1px solid #f0f0f0",
+                            borderRadius: 1,
+                            p: 2,
+                          }}
+                        >
+                          <Box
+                            display="flex"
+                            justifyContent="space-between"
+                            alignItems="center"
+                            mb={2}
                           >
-                            <Typography variant="caption" color="textSecondary">
-                              💡 This criterion's score will be calculated as
-                              the average of its sub-criteria.
+                            <Typography variant="subtitle2">
+                              Sub-Criteria
                             </Typography>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={<AddIcon />}
+                              onClick={() => addSubCriterion(criterion.id)}
+                            >
+                              Add Sub-Criterion
+                            </Button>
                           </Box>
-                        )}
-                      </Box>
-                    )}
 
-                    {!criterion.hasSubCriteria && (
-                      <Box
-                        sx={{
-                          mt: 2,
-                          p: 1,
-                          bgcolor: "#e8f5e8",
-                          borderRadius: 1,
-                        }}
-                      >
-                        <Typography variant="caption" color="textSecondary">
-                          ⭐ This criterion will have a direct 1-5 rating scale.
-                        </Typography>
-                      </Box>
-                    )}
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </CardContent>
-        </Card>
+                          {criterion.subCriteria.length === 0 ? (
+                            <Typography
+                              variant="body2"
+                              color="textSecondary"
+                              sx={{ textAlign: "center", py: 2 }}
+                            >
+                              No sub-criteria defined. Add one to get started.
+                            </Typography>
+                          ) : (
+                            criterion.subCriteria.map(
+                              (subCriterion, subIndex) => (
+                                <Box
+                                  key={subCriterion.id}
+                                  sx={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 1,
+                                    mb: 1,
+                                    p: 1,
+                                    border: "1px solid #e8e8e8",
+                                    borderRadius: 1,
+                                    bgcolor: "#fafafa",
+                                  }}
+                                >
+                                  <Typography
+                                    variant="caption"
+                                    sx={{ minWidth: "60px" }}
+                                  >
+                                    Sub {subIndex + 1}:
+                                  </Typography>
+                                  <TextField
+                                    size="small"
+                                    fullWidth
+                                    placeholder="Sub-criterion name"
+                                    value={subCriterion.name}
+                                    onChange={(e) =>
+                                      updateSubCriterion(
+                                        criterion.id,
+                                        subCriterion.id,
+                                        "name",
+                                        e.target.value
+                                      )
+                                    }
+                                  />
+                                  <IconButton
+                                    size="small"
+                                    color="error"
+                                    onClick={() =>
+                                      deleteSubCriterion(
+                                        criterion.id,
+                                        subCriterion.id
+                                      )
+                                    }
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Box>
+                              )
+                            )
+                          )}
+
+                          {criterion.subCriteria.length > 0 && (
+                            <Box
+                              sx={{
+                                mt: 2,
+                                p: 1,
+                                bgcolor: "#fff3e0",
+                                borderRadius: 1,
+                              }}
+                            >
+                              <Typography
+                                variant="caption"
+                                color="textSecondary"
+                              >
+                                💡 This criterion's score will be calculated as
+                                the average of its sub-criteria.
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
+                      )}
+
+                      {!criterion.hasSubCriteria && (
+                        <Box
+                          sx={{
+                            mt: 2,
+                            p: 1,
+                            bgcolor: "#e8f5e8",
+                            borderRadius: 1,
+                          }}
+                        >
+                          <Typography variant="caption" color="textSecondary">
+                            ⭐ This criterion will have a direct 0-4 rating
+                            scale.
+                          </Typography>
+                        </Box>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </Box>
       </DialogContent>
-
-      <DialogActions sx={{ p: 3, pt: 0 }}>
+      <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" onClick={handleSave}>
+        <Button
+          variant="contained"
+          startIcon={<SaveIcon />}
+          onClick={handleSave}
+        >
           Save Case
         </Button>
       </DialogActions>

@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import com.plabpractice.api.model.Feedback;
+import com.plabpractice.api.repository.FeedbackRepository;
 
 @Service
 @Transactional
@@ -40,6 +42,9 @@ public class SessionService {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private FeedbackRepository feedbackRepository;
 
     public Session createSession(String title, User creator) {
         Session session = new Session();
@@ -556,6 +561,42 @@ public class SessionService {
     }
 
     @Transactional(readOnly = true)
+    public boolean hasUserWithRoleGivenFeedback(String sessionCode, SessionParticipant.Role role) {
+        Optional<Session> sessionOpt = findSessionByCode(sessionCode);
+        if (!sessionOpt.isPresent()) {
+            return false;
+        }
+
+        Session session = sessionOpt.get();
+        List<SessionParticipant> participantsWithRole = sessionParticipantRepository
+                .findBySessionIdAndRole(session.getId(), role);
+
+        // Check if any active participant with this role has given feedback for the
+        // current round
+        return participantsWithRole.stream()
+                .filter(SessionParticipant::getIsActive)
+                .anyMatch(participant -> hasUserGivenFeedbackForCurrentRound(sessionCode, participant.getUser()));
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasUserGivenFeedbackForCurrentRound(String sessionCode, User user) {
+        Optional<Session> sessionOpt = findSessionByCode(sessionCode);
+        if (!sessionOpt.isPresent()) {
+            return false;
+        }
+
+        Session session = sessionOpt.get();
+
+        // Check if user has given feedback for the current case and round
+        List<Feedback> userFeedbackForSession = feedbackRepository.findBySessionIdAndSenderId(session.getId(),
+                user.getId());
+
+        return userFeedbackForSession.stream()
+                .anyMatch(feedback -> feedback.getCaseId().equals(session.getSelectedCase().getId()) &&
+                        feedback.getRoundNumber().equals(session.getCurrentRound()));
+    }
+
+    @Transactional(readOnly = true)
     public boolean hasUserCompleted(String sessionCode, User user) {
         Optional<Session> sessionOpt = findSessionByCode(sessionCode);
         if (!sessionOpt.isPresent()) {
@@ -571,6 +612,8 @@ public class SessionService {
 
     @Transactional
     public void markUserFeedbackGiven(String sessionCode, User user) {
+        // This method is kept for backwards compatibility but is no longer used
+        // Feedback tracking is now done through the Feedback model with round numbers
         Optional<Session> sessionOpt = findSessionByCode(sessionCode);
         if (!sessionOpt.isPresent()) {
             throw new RuntimeException("Session not found");

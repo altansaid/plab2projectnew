@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Remove default focus outline from all elements */
+*:focus {
+  outline: none !important;
+}
+
+/* Remove default focus ring from form elements */
+input:focus,
+textarea:focus,
+select:focus,
+button:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Ensure Material-UI components handle their own focus styling */
+.MuiTextField-root input:focus,
+.MuiTextField-root textarea:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Remove any browser default focus styles on form elements */
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+textarea:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: inherit !important;
+} 

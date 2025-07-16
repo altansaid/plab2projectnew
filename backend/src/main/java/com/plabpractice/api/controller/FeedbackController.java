@@ -8,6 +8,7 @@ import com.plabpractice.api.service.SessionWebSocketService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -36,7 +37,11 @@ public class FeedbackController {
     @Autowired
     private SessionParticipantRepository participantRepository;
 
+    @Autowired
+    private CaseRepository caseRepository;
+
     @PostMapping("/submit")
+    @Transactional
     public ResponseEntity<?> submitFeedback(@RequestBody Map<String, Object> feedbackData, Authentication auth) {
         try {
             System.out.println("🚀 Feedback submission received!");
@@ -48,6 +53,8 @@ public class FeedbackController {
 
             String sessionCode = (String) feedbackData.get("sessionCode");
             String comment = (String) feedbackData.get("comment");
+            Boolean requestNewCase = (Boolean) feedbackData.get("requestNewCase");
+            Boolean requestRoleChange = (Boolean) feedbackData.get("requestRoleChange");
 
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> criteriaScoresData = (List<Map<String, Object>>) feedbackData
@@ -56,6 +63,8 @@ public class FeedbackController {
             System.out.println("🔍 Parsed values:");
             System.out.println("   sessionCode: " + sessionCode);
             System.out.println("   comment: " + comment);
+            System.out.println("   requestNewCase: " + requestNewCase);
+            System.out.println("   requestRoleChange: " + requestRoleChange);
             System.out.println("   criteriaScoresData: " + criteriaScoresData);
             System.out.println(
                     "   criteriaScoresData size: " + (criteriaScoresData != null ? criteriaScoresData.size() : "null"));
@@ -115,8 +124,10 @@ public class FeedbackController {
                 criteriaScores.add(new Feedback.FeedbackScore(criterionId, criterionName, score, subScores));
             }
 
-            // Create feedback
+            // Create feedback - this must be saved first before any role changes
             Feedback feedback = feedbackService.createFeedback(session, user, recipient, comment, criteriaScores);
+            System.out.println("✅ Feedback saved successfully with ID: " + feedback.getId() + " for recipient: "
+                    + recipient.getName());
 
             // Mark user as having given feedback
             sessionService.markUserFeedbackGiven(sessionCode, user);
@@ -128,14 +139,36 @@ public class FeedbackController {
             // Notify other participants via WebSocket about the completion
             webSocketService.broadcastParticipantUpdate(sessionCode);
 
-            // Check if all users are completed to end the session
-            if (sessionService.areAllUsersCompleted(sessionCode)) {
+            // Handle new case request immediately if requested
+            boolean shouldStartNewCase = false;
+            if (requestNewCase != null && requestNewCase) {
+                if (requestRoleChange != null && requestRoleChange) {
+                    // Start new case with role change - this happens AFTER feedback is saved
+                    shouldStartNewCase = startNewCaseWithRoleChange(session, user);
+                    System.out.println("🔄 New case with role change requested by user, starting immediately: "
+                            + shouldStartNewCase);
+                } else {
+                    // Start new case immediately when requested
+                    shouldStartNewCase = startNewCaseAutomatically(session);
+                    System.out.println("🔄 New case requested by user, starting immediately: " + shouldStartNewCase);
+                }
+            } else {
+                // Check if both patient and observer have submitted feedback for auto new case
+                shouldStartNewCase = checkAndHandleNewCaseRequest(session);
+            }
+
+            // Check if all users are completed to end the session (only if not starting new
+            // case)
+            if (!shouldStartNewCase && sessionService.areAllUsersCompleted(sessionCode)) {
                 webSocketService.endSession(sessionCode, "All participants have completed their sessions");
             }
 
             Map<String, Object> response = new HashMap<>();
             response.put("message", "Feedback submitted successfully");
             response.put("feedbackId", feedback.getId());
+            if (shouldStartNewCase) {
+                response.put("newCaseStarted", true);
+            }
 
             return ResponseEntity.ok(response);
 
@@ -146,62 +179,213 @@ public class FeedbackController {
         }
     }
 
+    private boolean checkAndHandleNewCaseRequest(Session session) {
+        try {
+            // Check if both patient and observer have given feedback
+            boolean patientGaveFeedback = sessionService.hasUserWithRoleGivenFeedback(session.getCode(),
+                    SessionParticipant.Role.PATIENT);
+            boolean observerGaveFeedback = sessionService.hasUserWithRoleGivenFeedback(session.getCode(),
+                    SessionParticipant.Role.OBSERVER);
+
+            if (patientGaveFeedback && observerGaveFeedback) {
+                // Both have given feedback, start new case automatically
+                return startNewCaseAutomatically(session);
+            }
+        } catch (Exception e) {
+            System.out.println("Error checking for new case request: " + e.getMessage());
+        }
+        return false;
+    }
+
+    private boolean startNewCaseAutomatically(Session session) {
+        try {
+            // Get a new random case based on the current case's category
+            Case currentCase = session.getSelectedCase();
+            if (currentCase == null || currentCase.getCategory() == null) {
+                return false;
+            }
+
+            // Get all cases in the same category
+            List<Case> categoryCases = caseRepository.findByCategoryId(currentCase.getCategory().getId());
+            if (categoryCases.isEmpty()) {
+                return false;
+            }
+
+            // Select a random case from the category (different from the current one)
+            Case newCase;
+            if (categoryCases.size() > 1) {
+                do {
+                    newCase = categoryCases.get((int) (Math.random() * categoryCases.size()));
+                } while (newCase.getId().equals(currentCase.getId()));
+            } else {
+                // If there's only one case in the category, use it
+                newCase = categoryCases.get(0);
+            }
+
+            // Update session with new case
+            session.setSelectedCase(newCase);
+            session.setPhase(Session.Phase.READING);
+            session.setCurrentRound(session.getCurrentRound() + 1); // Increment round number
+            sessionRepository.save(session);
+
+            // Reset session participants' completion status
+            sessionService.resetParticipantStatus(session.getCode());
+
+            // Notify all participants about the new case and phase change
+            webSocketService.broadcastSessionUpdate(session.getCode());
+            webSocketService.broadcastPhaseChange(session.getCode(), Session.Phase.READING.toString(),
+                    session.getReadingTime() * 60, System.currentTimeMillis());
+
+            return true;
+        } catch (Exception e) {
+            System.out.println("Error starting new case automatically: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean startNewCaseWithRoleChange(Session session, User requestingUser) {
+        try {
+            // Get a new random case based on the current case's category
+            Case currentCase = session.getSelectedCase();
+            if (currentCase == null || currentCase.getCategory() == null) {
+                return false;
+            }
+
+            // Get all cases in the same category
+            List<Case> categoryCases = caseRepository.findByCategoryId(currentCase.getCategory().getId());
+            if (categoryCases.isEmpty()) {
+                return false;
+            }
+
+            // Select a random case from the category (different from the current one)
+            Case newCase;
+            if (categoryCases.size() > 1) {
+                do {
+                    newCase = categoryCases.get((int) (Math.random() * categoryCases.size()));
+                } while (newCase.getId().equals(currentCase.getId()));
+            } else {
+                // If there's only one case in the category, use it
+                newCase = categoryCases.get(0);
+            }
+
+            // Find and swap doctor and patient roles
+            List<SessionParticipant> participants = participantRepository.findBySessionIdAndIsActive(session.getId(),
+                    true);
+
+            SessionParticipant doctorParticipant = null;
+            SessionParticipant patientParticipant = null;
+
+            for (SessionParticipant participant : participants) {
+                if (participant.getRole() == SessionParticipant.Role.DOCTOR) {
+                    doctorParticipant = participant;
+                } else if (participant.getRole() == SessionParticipant.Role.PATIENT) {
+                    patientParticipant = participant;
+                }
+            }
+
+            // Swap roles if both doctor and patient exist
+            if (doctorParticipant != null && patientParticipant != null) {
+                String doctorName = doctorParticipant.getUser().getName();
+                String patientName = patientParticipant.getUser().getName();
+
+                doctorParticipant.setRole(SessionParticipant.Role.PATIENT);
+                patientParticipant.setRole(SessionParticipant.Role.DOCTOR);
+
+                participantRepository.save(doctorParticipant);
+                participantRepository.save(patientParticipant);
+
+                System.out.println("🔄 Roles swapped: " + doctorName + " -> PATIENT, " + patientName + " -> DOCTOR");
+
+                // Broadcast role change notification
+                webSocketService.broadcastRoleChange(session.getCode(),
+                        "Roles have been swapped: " + doctorName + " is now Patient, " + patientName
+                                + " is now Doctor");
+            }
+
+            // Update session with new case
+            session.setSelectedCase(newCase);
+            session.setPhase(Session.Phase.READING);
+            session.setCurrentRound(session.getCurrentRound() + 1); // Increment round number
+            sessionRepository.save(session);
+
+            // Reset session participants' completion status
+            sessionService.resetParticipantStatus(session.getCode());
+
+            // Notify all participants about the new case and phase change
+            webSocketService.broadcastSessionUpdate(session.getCode());
+            webSocketService.broadcastPhaseChange(session.getCode(), Session.Phase.READING.toString(),
+                    session.getReadingTime() * 60, System.currentTimeMillis());
+
+            return true;
+        } catch (Exception e) {
+            System.out.println("Error starting new case with role change: " + e.getMessage());
+            return false;
+        }
+    }
+
     @GetMapping("/received")
     public ResponseEntity<?> getReceivedFeedback(Authentication auth) {
         try {
             User user = userRepository.findByEmail(auth.getName())
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
-            // Find all sessions where this user was a doctor
-            List<SessionParticipant> doctorParticipations = participantRepository
-                    .findByUserIdAndRole(user.getId(), SessionParticipant.Role.DOCTOR);
+            // Find all feedback where this user was the recipient (regardless of current
+            // role)
+            // This correctly handles role switching scenarios
+            List<Feedback> allUserFeedback = feedbackService.getUserReceivedFeedback(user.getId());
 
             List<Map<String, Object>> allFeedback = new ArrayList<>();
 
-            for (SessionParticipant participation : doctorParticipations) {
-                Session session = participation.getSession();
+            for (Feedback feedback : allUserFeedback) {
+                Session session = feedback.getSession();
+                Map<String, Object> feedbackInfo = new HashMap<>();
+                feedbackInfo.put("id", feedback.getId());
+                feedbackInfo.put("sessionId", session.getId());
+                feedbackInfo.put("sessionCode", session.getCode());
+                feedbackInfo.put("sessionTitle", session.getTitle());
+                feedbackInfo.put("fromUser", feedback.getSender().getName());
+                feedbackInfo.put("fromUserEmail", feedback.getSender().getEmail());
 
-                // Get all feedback for this session (excluding feedback from the doctor
-                // themselves)
-                List<Feedback> sessionFeedback = feedbackService.getSessionFeedback(session.getId())
-                        .stream()
-                        .filter(feedback -> !feedback.getSender().getId().equals(user.getId()))
-                        .collect(Collectors.toList());
+                // Add recipient information
+                feedbackInfo.put("toUser", feedback.getRecipient().getName());
+                feedbackInfo.put("toUserEmail", feedback.getRecipient().getEmail());
 
-                for (Feedback feedback : sessionFeedback) {
-                    Map<String, Object> feedbackInfo = new HashMap<>();
-                    feedbackInfo.put("id", feedback.getId());
-                    feedbackInfo.put("sessionId", session.getId());
-                    feedbackInfo.put("sessionCode", session.getCode());
-                    feedbackInfo.put("sessionTitle", session.getTitle());
-                    feedbackInfo.put("fromUser", feedback.getSender().getName());
-                    feedbackInfo.put("fromUserEmail", feedback.getSender().getEmail());
+                // Find the role of the feedback giver in that session
+                Optional<SessionParticipant> feedbackGiverParticipation = participantRepository
+                        .findBySessionIdAndUserId(session.getId(), feedback.getSender().getId());
 
-                    // Add recipient information
-                    feedbackInfo.put("toUser", feedback.getRecipient().getName());
-                    feedbackInfo.put("toUserEmail", feedback.getRecipient().getEmail());
+                if (feedbackGiverParticipation.isPresent()) {
+                    feedbackInfo.put("fromUserRole",
+                            feedbackGiverParticipation.get().getRole().toString().toLowerCase());
+                } else {
+                    feedbackInfo.put("fromUserRole", "unknown");
+                }
 
-                    // Find the role of the feedback giver in that session
-                    Optional<SessionParticipant> feedbackGiverParticipation = participantRepository
-                            .findBySessionIdAndUserId(session.getId(), feedback.getSender().getId());
+                feedbackInfo.put("comment", feedback.getComment());
+                feedbackInfo.put("overallPerformance", feedback.getOverallPerformance());
+                feedbackInfo.put("timestamp", feedback.getCreatedAt().toString());
 
-                    if (feedbackGiverParticipation.isPresent()) {
-                        feedbackInfo.put("fromUserRole",
-                                feedbackGiverParticipation.get().getRole().toString().toLowerCase());
+                // Add dynamic criteria scores
+                feedbackInfo.put("criteriaScores", feedback.getCriteriaScores());
+
+                // Add case information from the feedback's stored caseId and round number
+                feedbackInfo.put("roundNumber", feedback.getRoundNumber());
+
+                if (feedback.getCaseId() != null) {
+                    // Get the specific case that was used for this feedback
+                    Optional<Case> feedbackCase = caseRepository.findById(feedback.getCaseId());
+                    if (feedbackCase.isPresent()) {
+                        Case caseData = feedbackCase.get();
+                        feedbackInfo.put("caseTitle", caseData.getTitle());
+                        feedbackInfo.put("caseId", caseData.getId());
+                        feedbackInfo.put("category", caseData.getCategory().getName());
                     } else {
-                        feedbackInfo.put("fromUserRole", "unknown");
+                        feedbackInfo.put("caseTitle", "Case not found (ID: " + feedback.getCaseId() + ")");
+                        feedbackInfo.put("caseId", feedback.getCaseId());
+                        feedbackInfo.put("category", "Unknown");
                     }
-
-                    feedbackInfo.put("comment", feedback.getComment());
-                    feedbackInfo.put("overallPerformance", feedback.getOverallPerformance());
-                    feedbackInfo.put("timestamp", feedback.getCreatedAt().toString());
-
-                    // Add dynamic criteria scores
-                    feedbackInfo.put("criteriaScores", feedback.getCriteriaScores());
-
-                    // Add case information if available
-                    // Note: Case title is shown in feedback phase since practice is already
-                    // completed
+                } else {
+                    // Fallback to session's current case for older feedback
                     if (session.getSelectedCase() != null) {
                         feedbackInfo.put("caseTitle", session.getSelectedCase().getTitle());
                         feedbackInfo.put("caseId", session.getSelectedCase().getId());
@@ -211,9 +395,9 @@ public class FeedbackController {
                         feedbackInfo.put("caseId", null);
                         feedbackInfo.put("category", "Unknown");
                     }
-
-                    allFeedback.add(feedbackInfo);
                 }
+
+                allFeedback.add(feedbackInfo);
             }
 
             // Sort by timestamp (newest first)

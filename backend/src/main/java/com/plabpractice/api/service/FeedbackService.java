@@ -46,6 +46,8 @@ public class FeedbackService {
         feedback.setSession(session);
         feedback.setSender(sender);
         feedback.setRecipient(recipient);
+        feedback.setCaseId(session.getSelectedCase().getId());
+        feedback.setRoundNumber(session.getCurrentRound());
         feedback.setComment(comment);
         feedback.setCriteriaScores(criteriaScores);
         feedback.setCreatedAt(LocalDateTime.now());
@@ -102,7 +104,7 @@ public class FeedbackService {
             }
         }
 
-        return count > 0 ? totalScore / count : 0.0;
+        return totalScore; // Return sum of all main criteria scores
     }
 
     public List<Feedback> getSessionFeedback(Long sessionId) {

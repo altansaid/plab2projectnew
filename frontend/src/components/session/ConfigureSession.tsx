@@ -24,11 +24,16 @@ import {
 import { Groups as GroupsIcon, Timer as TimerIcon } from "@mui/icons-material";
 import { RootState } from "../../store";
 import { SessionRole } from "../../features/session/sessionSlice";
-import { getCategories, configureSession } from "../../services/api";
+import {
+  getCategories,
+  configureSession,
+  getAllRecallDates,
+} from "../../services/api";
 
 interface SessionConfig {
   sessionType: "topic" | "recall";
   selectedTopics: string[];
+  recallDate?: string;
   readingTime: number;
   consultationTime: number;
   timingType: "countdown" | "stopwatch";
@@ -43,7 +48,9 @@ const ConfigureSession: React.FC = () => {
   const navigate = useNavigate();
   const { sessionCode } = useParams<{ sessionCode: string }>();
   const location = useLocation();
-  const { user } = useSelector((state: RootState) => state.auth);
+  const { user, token, isAuthenticated } = useSelector(
+    (state: RootState) => state.auth
+  );
 
   // Get role from location state (passed from role selection)
   const selectedRole = location.state?.role as SessionRole;
@@ -53,6 +60,7 @@ const ConfigureSession: React.FC = () => {
   const [config, setConfig] = useState<SessionConfig>({
     sessionType: "topic",
     selectedTopics: [],
+    recallDate: "",
     readingTime: 2,
     consultationTime: 8,
     timingType: "countdown",
@@ -65,14 +73,44 @@ const ConfigureSession: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [availableTopics, setAvailableTopics] = useState<string[]>([]);
+  const [availableRecallDates, setAvailableRecallDates] = useState<string[]>(
+    []
+  );
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const loadTopics = async () => {
+    const loadData = async () => {
+      console.log("Loading data with authentication:", {
+        user: !!user,
+        token: !!token,
+        isAuthenticated,
+      });
+
       try {
-        const response = await getCategories();
-        const topics = response.data.map((category: any) => category.name);
+        // Load topics first
+        const topicsResponse = await getCategories();
+        const topics = topicsResponse.data.map(
+          (category: any) => category.name
+        );
         setAvailableTopics([...topics, "Random"]);
+        console.log("Topics loaded successfully:", topics.length);
+
+        // Load recall dates with proper error handling
+        try {
+          console.log("Loading recall dates...");
+          const recallDatesResponse = await getAllRecallDates();
+          console.log("Recall dates response:", recallDatesResponse.data);
+          setAvailableRecallDates(recallDatesResponse.data || []);
+        } catch (recallError: any) {
+          console.error("Failed to load recall dates:", recallError);
+          // Check if it's an authentication error
+          if (recallError.response?.status === 403) {
+            console.error(
+              "Authentication error when loading recall dates - user not properly authenticated"
+            );
+          }
+          setAvailableRecallDates([]);
+        }
       } catch (error) {
         console.error("Failed to load topics:", error);
         // Fallback to default topics
@@ -91,13 +129,25 @@ const ConfigureSession: React.FC = () => {
           "Emergency Medicine",
           "Random",
         ]);
+        setAvailableRecallDates([]);
       } finally {
         setLoading(false);
       }
     };
 
-    loadTopics();
-  }, []);
+    // Only load data if user is authenticated and has a token
+    if (isAuthenticated && user && token) {
+      console.log("User is authenticated, loading data...");
+      loadData();
+    } else {
+      console.log("User not authenticated, skipping data load:", {
+        isAuthenticated,
+        user: !!user,
+        token: !!token,
+      });
+      setLoading(false);
+    }
+  }, [user, token, isAuthenticated]);
 
   const readingTimeOptions = [1, 1.5, 2, 3, 5];
   const consultationTimeOptions = [5, 7, 7.5, 8, 10, 12, 15];
@@ -110,6 +160,7 @@ const ConfigureSession: React.FC = () => {
       ...prev,
       sessionType: newType,
       selectedTopics: newType === "recall" ? [] : prev.selectedTopics,
+      recallDate: newType === "topic" ? "" : prev.recallDate,
     }));
   };
 
@@ -146,13 +197,19 @@ const ConfigureSession: React.FC = () => {
   const isFormValid = () => {
     if (config.sessionType === "topic") {
       return config.selectedTopics.length > 0;
+    } else if (config.sessionType === "recall") {
+      return config.recallDate && config.recallDate.length > 0;
     }
-    return true; // Recall practice doesn't require topic selection
+    return true;
   };
 
   const handleStartSession = async () => {
     if (!isFormValid()) {
-      setError("Please select at least one topic for topic-based practice");
+      if (config.sessionType === "topic") {
+        setError("Please select at least one topic for topic-based practice");
+      } else {
+        setError("Please select a recall date for recall practice");
+      }
       return;
     }
 
@@ -162,6 +219,7 @@ const ConfigureSession: React.FC = () => {
       const configData = {
         sessionType: config.sessionType.toUpperCase(),
         selectedTopics: config.selectedTopics,
+        recallDate: config.recallDate,
         readingTime: config.readingTime,
         consultationTime: config.consultationTime,
         timingType: config.timingType.toUpperCase(),
@@ -376,6 +434,84 @@ const ConfigureSession: React.FC = () => {
                       />
                     ))}
                   </Box>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Recall Date Selection */}
+            {config.sessionType === "recall" && (
+              <Card sx={{ mb: 4 }}>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    Choose Recall Date
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    Select the date for which you want to practice recall cases
+                  </Typography>
+
+                  {loading ? (
+                    <Box
+                      sx={{
+                        p: 3,
+                        textAlign: "center",
+                        backgroundColor: "#f5f5f5",
+                        borderRadius: 1,
+                      }}
+                    >
+                      <Typography variant="body1" color="text.secondary">
+                        Loading recall dates...
+                      </Typography>
+                    </Box>
+                  ) : availableRecallDates.length > 0 ? (
+                    <FormControl fullWidth sx={{ mb: 2 }}>
+                      <InputLabel>Select Recall Date</InputLabel>
+                      <Select
+                        value={config.recallDate || ""}
+                        onChange={(e) =>
+                          setConfig((prev) => ({
+                            ...prev,
+                            recallDate: e.target.value,
+                          }))
+                        }
+                        label="Select Recall Date"
+                      >
+                        {availableRecallDates.map((date) => {
+                          // Format date without timezone issues
+                          const formatDateLocal = (dateStr: string) => {
+                            const [year, month, day] = dateStr.split("-");
+                            return new Date(
+                              parseInt(year),
+                              parseInt(month) - 1,
+                              parseInt(day)
+                            ).toLocaleDateString();
+                          };
+
+                          return (
+                            <MenuItem key={date} value={date}>
+                              {formatDateLocal(date)}
+                            </MenuItem>
+                          );
+                        })}
+                      </Select>
+                    </FormControl>
+                  ) : (
+                    <Box
+                      sx={{
+                        p: 3,
+                        textAlign: "center",
+                        backgroundColor: "#f5f5f5",
+                        borderRadius: 1,
+                      }}
+                    >
+                      <Typography variant="body1" color="text.secondary">
+                        No recall dates available yet
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Cases need to be marked for recall practice in the admin
+                        panel
+                      </Typography>
+                    </Box>
+                  )}
                 </CardContent>
               </Card>
             )}

@@ -218,6 +218,18 @@ export const theme = createTheme({
             '&:hover fieldset': {
               borderColor: colors.neutral[400],
             },
+            '&.Mui-focused fieldset': {
+              borderColor: colors.primary[500],
+              borderWidth: '2px',
+            },
+            '& input:focus': {
+              outline: 'none !important',
+              boxShadow: 'none !important',
+            },
+            '& textarea:focus': {
+              outline: 'none !important',
+              boxShadow: 'none !important',
+            },
           },
         },
       },

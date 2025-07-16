@@ -9,7 +9,6 @@ interface Case {
   patientRole: string;
   observerNotes: string;
   learningObjectives: string;
-  difficulty: string;
   duration: number;
   doctorNotes: string;
   patientNotes: string;

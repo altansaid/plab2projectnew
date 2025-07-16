@@ -33,7 +33,6 @@ interface Case {
   title: string;
   description: string;
   category: Category;
-  difficulty: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
   duration: number;
 }
 
@@ -207,17 +206,6 @@ const SessionCreate: React.FC = () => {
                         </Typography>
                         <Box sx={{ display: "flex", gap: 1, mt: 0.5 }}>
                           <Chip
-                            label={caseItem.difficulty}
-                            size="small"
-                            color={
-                              caseItem.difficulty === "BEGINNER"
-                                ? "success"
-                                : caseItem.difficulty === "INTERMEDIATE"
-                                ? "warning"
-                                : "error"
-                            }
-                          />
-                          <Chip
                             label={`${caseItem.duration} min`}
                             size="small"
                             variant="outlined"
@@ -242,16 +230,6 @@ const SessionCreate: React.FC = () => {
                   {selectedCase.description}
                 </Typography>
                 <Box sx={{ display: "flex", gap: 1 }}>
-                  <Chip
-                    label={`Difficulty: ${selectedCase.difficulty}`}
-                    color={
-                      selectedCase.difficulty === "BEGINNER"
-                        ? "success"
-                        : selectedCase.difficulty === "INTERMEDIATE"
-                        ? "warning"
-                        : "error"
-                    }
-                  />
                   <Chip
                     label={`Duration: ${selectedCase.duration} minutes`}
                     variant="outlined"

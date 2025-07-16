@@ -35,6 +35,11 @@ import {
 } from "../../features/admin/adminSlice";
 import { api } from "../../services/api";
 import CaseEditor from "./CaseEditor";
+import { Tab as HeadlessTab } from "@headlessui/react";
+
+function classNames(...classes: string[]) {
+  return classes.filter(Boolean).join(" ");
+}
 
 interface TabPanelProps {
   children?: React.ReactNode;

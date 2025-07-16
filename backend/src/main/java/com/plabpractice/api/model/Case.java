@@ -23,13 +23,42 @@ public class Case {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @ManyToOne
-    @JoinColumn(name = "category_id", nullable = false)
-    private Category category;
+    @Column(columnDefinition = "TEXT")
+    private String doctorInstructions;
 
     @Column(columnDefinition = "TEXT")
-    private String scenario;
+    private String patientInstructions;
 
+    @Column(columnDefinition = "TEXT")
+    private String observerInstructions;
+
+    @ManyToOne
+    @JoinColumn(name = "category_id")
+    private Category category;
+
+    // Doctor role specific content
+    @Column(columnDefinition = "TEXT")
+    private String doctorDescription;
+
+    @Column(columnDefinition = "TEXT")
+    private String doctorScenario;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", name = "doctor_sections")
+    private List<CaseSection> doctorSections;
+
+    // Patient/Observer role specific content
+    @Column(columnDefinition = "TEXT")
+    private String patientDescription;
+
+    @Column(columnDefinition = "TEXT")
+    private String patientScenario;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", name = "patient_sections")
+    private List<CaseSection> patientSections;
+
+    // Common fields
     @Column(columnDefinition = "TEXT")
     private String doctorRole;
 
@@ -41,10 +70,6 @@ public class Case {
 
     @Column(columnDefinition = "TEXT")
     private String learningObjectives;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private Difficulty difficulty = Difficulty.INTERMEDIATE;
 
     @Column(nullable = false)
     private Integer duration = 15; // Duration in minutes
@@ -58,25 +83,39 @@ public class Case {
     @Column(columnDefinition = "TEXT")
     private String imageUrl; // URL or path to patient image/diagram
 
+    // Visual data that supports both image and text content
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", name = "visual_data")
+    private VisualData visualData;
+
     @ElementCollection
     @CollectionTable(name = "case_topics", joinColumns = @JoinColumn(name = "case_id"))
     @Column(name = "topic")
     private List<String> topics;
-
-    // Modular sections for dynamic content
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
-    private List<CaseSection> sections;
 
     // Case-specific feedback criteria
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private List<FeedbackCriterion> feedbackCriteria;
 
-    public enum Difficulty {
-        BEGINNER,
-        INTERMEDIATE,
-        ADVANCED
+    // Recall functionality
+    @Column(name = "is_recall_case", nullable = false)
+    private Boolean isRecallCase = false;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", name = "recall_dates")
+    private List<String> recallDates; // Store dates as ISO strings (YYYY-MM-DD)
+
+    @Data
+    @NoArgsConstructor
+    public static class VisualData {
+        private String type; // "image" or "text"
+        private String content; // URL for image, text content for text type
+
+        public VisualData(String type, String content) {
+            this.type = type;
+            this.content = content;
+        }
     }
 
     @Data

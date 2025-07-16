@@ -30,11 +30,17 @@ public class Feedback {
     @JoinColumn(name = "recipient_id", nullable = false)
     private User recipient;
 
+    @Column(name = "case_id", nullable = false)
+    private Long caseId; // Track which case this feedback is for
+
+    @Column(name = "round_number", nullable = false)
+    private Integer roundNumber; // Track which round this feedback is for
+
     @Column(nullable = false)
     private String comment; // Additional Comment
 
     @Column(nullable = false)
-    private Double overallPerformance; // Calculated from criteria scores (1.0-5.0)
+    private Double overallPerformance; // Sum of all main criteria scores (0.0-4.0 each)
 
     @Column(name = "score", nullable = false)
     private Integer score; // Legacy score column (mapped from overallPerformance)
@@ -68,7 +74,7 @@ public class Feedback {
     public static class FeedbackSubScore {
         private String subCriterionId;
         private String subCriterionName;
-        private Double score; // 1.0-5.0
+        private Double score; // 0.0-4.0
 
         public FeedbackSubScore(String subCriterionId, String subCriterionName, Double score) {
             this.subCriterionId = subCriterionId;

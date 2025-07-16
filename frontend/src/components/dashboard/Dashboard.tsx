@@ -75,6 +75,7 @@ interface Feedback {
   caseTitle: string;
   caseId: number | null;
   category: string;
+  roundNumber: number;
   criteriaScores: FeedbackCriteriaScore[];
 }
 
@@ -84,6 +85,45 @@ const Dashboard: React.FC = () => {
   const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Helper function to calculate maximum possible score for a feedback
+  const calculateMaxScore = (criteriaScores: FeedbackCriteriaScore[]) => {
+    return criteriaScores.length * 4; // Each criterion can score up to 4
+  };
+
+  // Helper function to get performance percentage (for color thresholds)
+  const getPerformancePercentage = (score: number, maxScore: number) => {
+    return maxScore > 0 ? (score / maxScore) * 100 : 0;
+  };
+
+  // Helper function to calculate main criterion score when it has sub-criteria
+  const getMainCriterionScore = (criteria: FeedbackCriteriaScore) => {
+    if (criteria.score !== null) {
+      return criteria.score;
+    }
+
+    // If main score is null but there are sub-scores, calculate average
+    if (criteria.subScores && criteria.subScores.length > 0) {
+      const validSubScores = criteria.subScores.filter(
+        (sub) => sub.score !== null
+      );
+      if (validSubScores.length > 0) {
+        const sum = validSubScores.reduce(
+          (total, sub) => total + (sub.score || 0),
+          0
+        );
+        return sum / validSubScores.length;
+      }
+    }
+
+    return null;
+  };
+
+  // Helper function to format timestamp with both date and time
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleString(); // This shows both date and time
+  };
 
   const fetchDashboardData = async (showLoader = false) => {
     if (showLoader) setIsRefreshing(true);
@@ -138,6 +178,14 @@ const Dashboard: React.FC = () => {
               sx={{ mr: 2 }}
             >
               {isRefreshing ? "Refreshing..." : "Refresh"}
+            </Button>
+            <Button
+              variant="contained"
+              color="secondary"
+              onClick={() => navigate("/session/join")}
+              sx={{ mr: 2 }}
+            >
+              Join Session
             </Button>
             <Button
               variant="contained"
@@ -288,15 +336,27 @@ const Dashboard: React.FC = () => {
                           mb: 2,
                           border: "2px solid",
                           borderColor:
-                            item.overallPerformance >= 4
+                            getPerformancePercentage(
+                              item.overallPerformance,
+                              calculateMaxScore(item.criteriaScores)
+                            ) >= 80
                               ? "success.main"
-                              : item.overallPerformance >= 3
+                              : getPerformancePercentage(
+                                  item.overallPerformance,
+                                  calculateMaxScore(item.criteriaScores)
+                                ) >= 60
                               ? "warning.main"
                               : "error.main",
                           backgroundColor:
-                            item.overallPerformance >= 4
+                            getPerformancePercentage(
+                              item.overallPerformance,
+                              calculateMaxScore(item.criteriaScores)
+                            ) >= 80
                               ? "success.50"
-                              : item.overallPerformance >= 3
+                              : getPerformancePercentage(
+                                  item.overallPerformance,
+                                  calculateMaxScore(item.criteriaScores)
+                                ) >= 60
                               ? "warning.50"
                               : "error.50",
                         }}
@@ -328,7 +388,8 @@ const Dashboard: React.FC = () => {
                                 variant="body2"
                                 color="text.secondary"
                               >
-                                {item.category} • Session: {item.sessionCode}
+                                {item.category} • Session: {item.sessionCode} •
+                                Round: {item.roundNumber}
                               </Typography>
                             </Box>
                             <Box sx={{ textAlign: "right" }}>
@@ -337,14 +398,9 @@ const Dashboard: React.FC = () => {
                                 color="primary"
                                 sx={{ fontWeight: "bold" }}
                               >
-                                {item.overallPerformance?.toFixed(1) || "N/A"}
+                                {item.overallPerformance?.toFixed(1) || "0"}/
+                                {calculateMaxScore(item.criteriaScores)}
                               </Typography>
-                              <Rating
-                                value={item.overallPerformance}
-                                readOnly
-                                size="small"
-                                precision={0.1}
-                              />
                             </Box>
                           </Box>
 
@@ -372,9 +428,7 @@ const Dashboard: React.FC = () => {
                               size="small"
                             />
                             <Chip
-                              label={new Date(
-                                item.timestamp
-                              ).toLocaleDateString()}
+                              label={formatTimestamp(item.timestamp)}
                               variant="outlined"
                               size="small"
                             />
@@ -470,22 +524,31 @@ const Dashboard: React.FC = () => {
                                                 <Typography
                                                   variant="h6"
                                                   color={
-                                                    (criteria.score ?? 0) >= 4
+                                                    (getMainCriterionScore(
+                                                      criteria
+                                                    ) ?? 0) >= 3.2
                                                       ? "success.main"
-                                                      : (criteria.score ?? 0) >=
-                                                        3
+                                                      : (getMainCriterionScore(
+                                                          criteria
+                                                        ) ?? 0) >= 2.4
                                                       ? "warning.main"
                                                       : "error.main"
                                                   }
                                                   sx={{ fontWeight: "bold" }}
                                                 >
-                                                  {criteria.score?.toFixed(1) ||
-                                                    "N/A"}
+                                                  {getMainCriterionScore(
+                                                    criteria
+                                                  )?.toFixed(1) || "N/A"}
                                                 </Typography>
                                               </TableCell>
                                               <TableCell align="center">
                                                 <Rating
-                                                  value={criteria.score}
+                                                  value={
+                                                    getMainCriterionScore(
+                                                      criteria
+                                                    ) || 0
+                                                  }
+                                                  max={4}
                                                   readOnly
                                                   size="small"
                                                   precision={0.1}
@@ -523,10 +586,10 @@ const Dashboard: React.FC = () => {
                                                         variant="body2"
                                                         color={
                                                           (subCriteria.score ??
-                                                            0) >= 4
+                                                            0) >= 3.2
                                                             ? "success.main"
                                                             : (subCriteria.score ??
-                                                                0) >= 3
+                                                                0) >= 2.4
                                                             ? "warning.main"
                                                             : "error.main"
                                                         }
@@ -544,6 +607,7 @@ const Dashboard: React.FC = () => {
                                                         value={
                                                           subCriteria.score
                                                         }
+                                                        max={4}
                                                         readOnly
                                                         size="small"
                                                         precision={0.1}

@@ -6,9 +6,11 @@ import com.plabpractice.api.model.Session;
 import com.plabpractice.api.repository.CaseRepository;
 import com.plabpractice.api.repository.CategoryRepository;
 import com.plabpractice.api.repository.SessionRepository;
+import com.plabpractice.api.exception.ResourceNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.HashMap;
 import java.util.List;
@@ -88,34 +90,123 @@ public class CaseController {
         return ResponseEntity.ok(randomCase);
     }
 
+    // Recall-specific endpoints
+    @GetMapping("/recall")
+    public ResponseEntity<List<Case>> getAllRecallCases() {
+        List<Case> recallCases = caseRepository.findByIsRecallCaseTrue();
+        return ResponseEntity.ok(recallCases);
+    }
+
+    @GetMapping("/recall/dates")
+    public ResponseEntity<List<String>> getAllRecallDates() {
+        List<Case> recallCases = caseRepository.findByIsRecallCaseTrue();
+        List<String> dates = recallCases.stream()
+                .filter(c -> c.getRecallDates() != null)
+                .flatMap(c -> c.getRecallDates().stream())
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(dates);
+    }
+
+    @GetMapping("/recall/by-date")
+    public ResponseEntity<List<Case>> getRecallCasesByDate(@RequestParam String date) {
+        List<Case> recallCases = caseRepository.findByIsRecallCaseTrue();
+        List<Case> filteredCases = recallCases.stream()
+                .filter(c -> c.getRecallDates() != null && c.getRecallDates().contains(date))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(filteredCases);
+    }
+
+    @GetMapping("/recall/random")
+    public ResponseEntity<Case> getRandomRecallCase(@RequestParam String date) {
+        List<Case> recallCases = caseRepository.findByIsRecallCaseTrue();
+        List<Case> availableCases = recallCases.stream()
+                .filter(c -> c.getRecallDates() != null && c.getRecallDates().contains(date))
+                .collect(Collectors.toList());
+
+        if (availableCases.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Case randomCase = availableCases.get((int) (Math.random() * availableCases.size()));
+        return ResponseEntity.ok(randomCase);
+    }
+
     @PostMapping
-    public ResponseEntity<Case> createCase(@RequestBody Case case_) {
-        Case savedCase = caseRepository.save(case_);
-        return ResponseEntity.ok(savedCase);
+    @PreAuthorize("hasRole('ADMIN')")
+    public Case createCase(@RequestBody Case caseData) {
+        Category category = categoryRepository.findById(caseData.getCategory().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
+        caseData.setCategory(category);
+
+        // Handle visual data and maintain backward compatibility
+        handleVisualData(caseData);
+
+        return caseRepository.save(caseData);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Case> updateCase(@PathVariable Long id, @RequestBody Case caseDetails) {
-        return caseRepository.findById(id)
-                .map(case_ -> {
-                    case_.setTitle(caseDetails.getTitle());
-                    case_.setDescription(caseDetails.getDescription());
-                    case_.setCategory(caseDetails.getCategory());
-                    case_.setScenario(caseDetails.getScenario());
-                    case_.setDoctorRole(caseDetails.getDoctorRole());
-                    case_.setPatientRole(caseDetails.getPatientRole());
-                    case_.setObserverNotes(caseDetails.getObserverNotes());
-                    case_.setLearningObjectives(caseDetails.getLearningObjectives());
-                    case_.setDifficulty(caseDetails.getDifficulty());
-                    case_.setDuration(caseDetails.getDuration());
-                    case_.setDoctorNotes(caseDetails.getDoctorNotes());
-                    case_.setPatientNotes(caseDetails.getPatientNotes());
-                    case_.setImageUrl(caseDetails.getImageUrl());
-                    case_.setSections(caseDetails.getSections());
-                    case_.setFeedbackCriteria(caseDetails.getFeedbackCriteria());
-                    return ResponseEntity.ok(caseRepository.save(case_));
-                })
-                .orElse(ResponseEntity.notFound().build());
+    @PreAuthorize("hasRole('ADMIN')")
+    public Case updateCase(@PathVariable Long id, @RequestBody Case caseData) {
+        Case existingCase = caseRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Case not found"));
+
+        Category category = categoryRepository.findById(caseData.getCategory().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
+
+        existingCase.setCategory(category);
+        existingCase.setTitle(caseData.getTitle());
+        existingCase.setDescription(caseData.getDescription());
+        existingCase.setDoctorInstructions(caseData.getDoctorInstructions());
+        existingCase.setPatientInstructions(caseData.getPatientInstructions());
+        existingCase.setObserverInstructions(caseData.getObserverInstructions());
+        existingCase.setDoctorDescription(caseData.getDoctorDescription());
+        existingCase.setDoctorScenario(caseData.getDoctorScenario());
+        existingCase.setDoctorSections(caseData.getDoctorSections());
+        existingCase.setPatientDescription(caseData.getPatientDescription());
+        existingCase.setPatientScenario(caseData.getPatientScenario());
+        existingCase.setPatientSections(caseData.getPatientSections());
+        existingCase.setDoctorRole(caseData.getDoctorRole());
+        existingCase.setPatientRole(caseData.getPatientRole());
+        existingCase.setObserverNotes(caseData.getObserverNotes());
+        existingCase.setLearningObjectives(caseData.getLearningObjectives());
+        existingCase.setDuration(caseData.getDuration());
+        existingCase.setDoctorNotes(caseData.getDoctorNotes());
+        existingCase.setPatientNotes(caseData.getPatientNotes());
+        existingCase.setImageUrl(caseData.getImageUrl());
+        existingCase.setVisualData(caseData.getVisualData());
+        existingCase.setFeedbackCriteria(caseData.getFeedbackCriteria());
+        existingCase.setIsRecallCase(caseData.getIsRecallCase());
+        existingCase.setRecallDates(caseData.getRecallDates());
+
+        // Handle visual data and maintain backward compatibility
+        handleVisualData(existingCase);
+
+        return caseRepository.save(existingCase);
+    }
+
+    /**
+     * Helper method to handle visual data and maintain backward compatibility with
+     * imageUrl
+     */
+    private void handleVisualData(Case caseData) {
+        // If visualData is provided, use it and update imageUrl for backward
+        // compatibility
+        if (caseData.getVisualData() != null) {
+            Case.VisualData visualData = caseData.getVisualData();
+
+            // If it's an image type, also set the imageUrl field for backward compatibility
+            if ("image".equals(visualData.getType()) && visualData.getContent() != null) {
+                caseData.setImageUrl(visualData.getContent());
+            } else if ("text".equals(visualData.getType())) {
+                // For text type, clear the imageUrl
+                caseData.setImageUrl(null);
+            }
+        } else if (caseData.getImageUrl() != null) {
+            // If only imageUrl is provided (backward compatibility), create visualData
+            caseData.setVisualData(new Case.VisualData("image", caseData.getImageUrl()));
+        }
     }
 
     @DeleteMapping("/{id}")

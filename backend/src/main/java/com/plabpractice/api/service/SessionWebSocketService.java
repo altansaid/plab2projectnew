@@ -61,6 +61,18 @@ public class SessionWebSocketService {
         }
     }
 
+    public void broadcastRoleChange(String sessionCode, String message) {
+        Map<String, Object> roleChangeData = new HashMap<>();
+        roleChangeData.put("type", "ROLE_CHANGE");
+        roleChangeData.put("message", message);
+        roleChangeData.put("sessionCode", sessionCode);
+
+        messagingTemplate.convertAndSend("/topic/session/" + sessionCode, roleChangeData);
+
+        // Also broadcast the session update to reflect the new roles
+        broadcastSessionUpdate(sessionCode);
+    }
+
     public void broadcastParticipantUpdate(String sessionCode) {
         Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
         if (sessionOpt.isPresent()) {
@@ -151,7 +163,17 @@ public class SessionWebSocketService {
         ScheduledFuture<?> expiryTask = scheduler.schedule(() -> {
             if (activeTimers.getOrDefault(sessionCode, false)) {
                 System.out.println("Timer expired for session: " + sessionCode + " - triggering phase transition");
-                handlePhaseTransition(session);
+
+                // Reload session to get current state
+                Optional<Session> currentSessionOpt = sessionRepository.findByCode(sessionCode);
+                if (currentSessionOpt.isPresent()) {
+                    Session currentSession = currentSessionOpt.get();
+
+                    // Only proceed if the session is still in the same phase
+                    if (currentSession.getPhase() == session.getPhase()) {
+                        handlePhaseTransition(currentSession);
+                    }
+                }
             }
         }, phaseDurationSeconds, TimeUnit.SECONDS);
 
@@ -192,9 +214,17 @@ public class SessionWebSocketService {
         }
 
         if (nextPhase != null) {
-            broadcastPhaseChange(session.getCode(), nextPhase.toString(), getCurrentPhaseTime(session),
-                    System.currentTimeMillis());
-            // Restart timer for the new phase (unless transitioning to feedback)
+            // Update session phase
+            session.setPhase(nextPhase);
+            session = sessionRepository.save(session);
+
+            // Broadcast phase change with appropriate duration
+            int phaseDuration = getCurrentPhaseTime(session);
+            long startTimestamp = System.currentTimeMillis();
+
+            broadcastPhaseChange(session.getCode(), nextPhase.toString(), phaseDuration, startTimestamp);
+
+            // Start timer for the new phase (unless transitioning to feedback)
             if (nextPhase != Session.Phase.FEEDBACK) {
                 startTimer(session.getCode());
             } else {
@@ -393,6 +423,7 @@ public class SessionWebSocketService {
         data.put("status", session.getStatus());
         data.put("timeRemaining", session.getTimeRemaining());
         data.put("totalTime", getCurrentPhaseTime(session));
+        data.put("currentRound", session.getCurrentRound()); // Include current round for feedback state management
 
         Map<String, Object> config = new HashMap<>();
         config.put("readingTime", session.getReadingTime());
@@ -402,8 +433,25 @@ public class SessionWebSocketService {
         config.put("selectedTopics", session.getSelectedTopics());
         data.put("config", config);
 
-        List<SessionParticipant> participants = participantRepository.findBySessionId(session.getId());
-        data.put("participants", participants);
+        // Get only ACTIVE participants and format them properly
+        List<SessionParticipant> activeParticipants = participantRepository.findBySessionIdAndIsActive(session.getId(),
+                true);
+
+        // Enhanced participant data with user information - same format as
+        // broadcastParticipantUpdate
+        List<Map<String, Object>> participantDetails = activeParticipants.stream().map(p -> {
+            Map<String, Object> detail = new HashMap<>();
+            detail.put("id", p.getUser().getId().toString()); // Use userId as id for frontend compatibility
+            detail.put("userId", p.getUser().getId());
+            detail.put("name", p.getUser().getName());
+            detail.put("role", p.getRole().toString().toLowerCase());
+            detail.put("isOnline", true); // For now, assume all are online
+            detail.put("hasCompleted", p.getHasCompleted());
+            detail.put("hasGivenFeedback", p.getHasGivenFeedback());
+            return detail;
+        }).toList();
+
+        data.put("participants", participantDetails);
 
         // Include case data if available - title will be filtered on frontend based on
         // role
@@ -451,16 +499,22 @@ public class SessionWebSocketService {
                     filteredCase.put("id", fullCase.getId());
                     // Don't include title for doctors
                     filteredCase.put("description", fullCase.getDescription());
-                    filteredCase.put("scenario", fullCase.getScenario());
+                    // Add role-specific content based on participant role
+                    if (participant.getRole().equals("DOCTOR")) {
+                        filteredCase.put("scenario", fullCase.getDoctorScenario());
+                        filteredCase.put("sections", fullCase.getDoctorSections());
+                    } else {
+                        filteredCase.put("scenario", fullCase.getPatientScenario());
+                        filteredCase.put("sections", fullCase.getPatientSections());
+                    }
                     filteredCase.put("doctorRole", fullCase.getDoctorRole());
                     filteredCase.put("patientRole", fullCase.getPatientRole());
+                    filteredCase.put("observerNotes", fullCase.getObserverNotes());
+                    filteredCase.put("learningObjectives", fullCase.getLearningObjectives());
+                    filteredCase.put("duration", fullCase.getDuration());
                     filteredCase.put("doctorNotes", fullCase.getDoctorNotes());
                     filteredCase.put("patientNotes", fullCase.getPatientNotes());
-                    filteredCase.put("observerNotes", fullCase.getObserverNotes());
-                    filteredCase.put("category", fullCase.getCategory());
-                    filteredCase.put("difficulty", fullCase.getDifficulty());
-                    filteredCase.put("duration", fullCase.getDuration());
-                    filteredCase.put("sections", fullCase.getSections());
+                    filteredCase.put("imageUrl", fullCase.getImageUrl());
                     filteredCase.put("feedbackCriteria", fullCase.getFeedbackCriteria());
                     caseToSend = filteredCase;
                 } else {

@@ -10,6 +10,20 @@ import React, {
 import { useTheme } from "@mui/material/styles";
 import { alpha } from "@mui/material/styles";
 
+// Logger utility for development
+const logger = {
+  log: (...args: any[]) => {
+    if (import.meta.env.DEV) {
+      console.log(...args);
+    }
+  },
+  error: (...args: any[]) => {
+    if (import.meta.env.DEV) {
+      console.error(...args);
+    }
+  },
+};
+
 /*
  * 🔧 PERSISTENT FEEDBACK STATE SOLUTION
  *
@@ -89,12 +103,14 @@ import {
   submitFeedback,
   completeSession,
   requestNewCase,
+  getObserverFeedbackStatus,
 } from "../../services/api";
 
 interface SessionData {
   sessionCode: string;
   title: string;
   phase: "waiting" | "reading" | "consultation" | "feedback" | "completed";
+  currentRound?: number; // Track which round/case iteration we're on
   participants: Array<{
     id: string;
     name: string;
@@ -103,7 +119,6 @@ interface SessionData {
     hasCompleted?: boolean;
     hasGivenFeedback?: boolean;
   }>;
-  // REMOVED: timeRemaining and totalTime - these belong in timerData to prevent re-renders
   config: {
     readingTime: number;
     consultationTime: number;
@@ -114,25 +129,40 @@ interface SessionData {
     id: number;
     title: string;
     description: string;
-    scenario?: string;
+    // Doctor role specific content
+    doctorDescription?: string;
+    doctorScenario?: string;
+    doctorSections?: Array<{
+      id: string;
+      title: string;
+      content: string;
+      order: number;
+    }>;
+    // Patient/Observer role specific content
+    patientDescription?: string;
+    patientScenario?: string;
+    patientSections?: Array<{
+      id: string;
+      title: string;
+      content: string;
+      order: number;
+    }>;
+    // Common fields
     doctorRole?: string;
     patientRole?: string;
     doctorNotes?: string;
     patientNotes?: string;
     observerNotes?: string;
     imageUrl?: string;
+    visualData?: {
+      type: "image" | "text";
+      content: string;
+    };
     category: {
       id: number;
       name: string;
     };
-    difficulty?: string;
     duration?: number;
-    sections?: Array<{
-      id: string;
-      title: string;
-      content: string;
-      order: number;
-    }>;
     feedbackCriteria?: Array<{
       id: string;
       name: string;
@@ -178,7 +208,7 @@ const useClientTimer = () => {
   // Start client-side timer with given parameters
   const startClientTimer = useCallback(
     (durationSeconds: number, startTimestamp: number, phase: string) => {
-      console.log("Starting client-side timer:", {
+      logger.log("Starting client-side timer:", {
         durationSeconds,
         startTimestamp,
         phase,
@@ -204,7 +234,7 @@ const useClientTimer = () => {
         const remaining = Math.max(0, durationSeconds - elapsed);
 
         if (remaining <= 0) {
-          console.log("Client-side timer expired for phase:", phase);
+          logger.log("Client-side timer expired for phase:", phase);
           setTimerState((prev) => ({ ...prev, isActive: false }));
           if (intervalRef.current) {
             clearInterval(intervalRef.current);
@@ -220,7 +250,7 @@ const useClientTimer = () => {
 
   // Stop client-side timer
   const stopClientTimer = useCallback(() => {
-    console.log("Stopping client-side timer");
+    logger.log("Stopping client-side timer");
 
     setTimerState((prev) => ({
       ...prev,
@@ -336,416 +366,538 @@ const TimerDisplay = memo(({ clientTimer }: { clientTimer: any }) => {
 });
 
 // STABLE Feedback Component - uses single handler to prevent focus loss
-const StableFeedbackComponent = memo(
-  ({
-    sessionCode,
-    phase,
-    onSubmitSuccess,
-    visible = true,
-    // STABLE PROPS FROM PARENT - prevent re-renders and focus loss
-    feedbackState,
-    isSubmitting,
-    hasSubmitted,
-    selectedCase,
-    onFieldChange, // Single stable handler
-    onSubmit, // Single stable submit handler
-  }: {
-    sessionCode: string;
-    phase: string;
-    onSubmitSuccess?: () => void;
-    visible?: boolean;
-    feedbackState: FeedbackState;
-    isSubmitting: boolean;
-    hasSubmitted: boolean;
-    selectedCase?: {
-      feedbackCriteria?: Array<{
+const StableFeedbackComponent = ({
+  sessionCode,
+  phase,
+  onSubmitSuccess,
+  visible = true,
+  // STABLE PROPS FROM PARENT - prevent re-renders and focus loss
+  feedbackState,
+  isSubmitting,
+  hasSubmitted,
+  selectedCase,
+  userRole,
+  onFieldChange, // Single stable handler
+  onSubmit, // Single stable submit handler
+  onSubmitWithRoleChange, // New handler for role change
+  validateObserverFeedback, // Observer feedback validation
+}: {
+  sessionCode: string;
+  phase: string;
+  onSubmitSuccess?: () => void;
+  visible?: boolean;
+  feedbackState: FeedbackState;
+  isSubmitting: boolean;
+  hasSubmitted: boolean;
+  selectedCase?: {
+    feedbackCriteria?: Array<{
+      id: string;
+      name: string;
+      order: number;
+      hasSubCriteria: boolean;
+      subCriteria: Array<{
         id: string;
         name: string;
         order: number;
-        hasSubCriteria: boolean;
-        subCriteria: Array<{
-          id: string;
-          name: string;
-          order: number;
-        }>;
       }>;
-    };
-    onFieldChange: (
-      fieldName: string,
-      value: string | number,
-      subFieldId?: string
-    ) => void;
-    onSubmit: () => Promise<void>;
-  }) => {
-    // Debug logging to track component stability
-    useEffect(() => {
-      console.log("🔄 StableFeedbackComponent: Phase changed to", phase);
-      console.log(
-        "🔒 Component rendered with stable props - no focus loss expected"
-      );
-    }, [phase]);
-
-    // Note: createCriteriaHandler removed - using direct onFieldChange calls with rating buttons
-
-    // STABLE COMMENT HANDLER
-    const handleCommentChange = useCallback(
-      (event: React.ChangeEvent<HTMLInputElement>) => {
-        onFieldChange("additionalComments", event.target.value);
-      },
-      [onFieldChange]
+    }>;
+  };
+  userRole?: string;
+  onFieldChange: (
+    fieldName: string,
+    value: string | number,
+    subFieldId?: string
+  ) => void;
+  onSubmit: (startNewCase?: boolean) => Promise<void>;
+  onSubmitWithRoleChange?: () => Promise<void>;
+  validateObserverFeedback?: (
+    actionType: "newCase" | "roleChange"
+  ) => Promise<boolean>;
+}) => {
+  // Debug logging to track component stability
+  useEffect(() => {
+    logger.log("🔄 StableFeedbackComponent: Phase changed to", phase);
+    logger.log(
+      "🔒 Component rendered with stable props - no focus loss expected"
     );
+  }, [phase]);
 
-    // Calculate overall performance from current scores
-    const calculateOverallPerformance = useCallback(() => {
-      if (!feedbackState.criteriaScores.length) return 0;
+  // Debug: Log when feedbackState changes
+  useEffect(() => {
+    console.log("📊 StableFeedbackComponent: feedbackState updated", {
+      criteriaScoresLength: feedbackState.criteriaScores.length,
+      criteriaScores: feedbackState.criteriaScores,
+      additionalComments: feedbackState.additionalComments,
+    });
+  }, [feedbackState]);
 
-      let totalScore = 0;
-      let count = 0;
+  // Note: createCriteriaHandler removed - using direct onFieldChange calls with rating buttons
 
-      feedbackState.criteriaScores.forEach((criteria) => {
-        if (criteria.score !== null) {
-          totalScore += criteria.score;
+  // STABLE COMMENT HANDLER
+  const handleCommentChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      onFieldChange("additionalComments", event.target.value);
+    },
+    [onFieldChange]
+  );
+
+  // Calculate overall performance from current scores
+  const calculateOverallPerformance = useCallback(() => {
+    if (!feedbackState.criteriaScores.length) return 0;
+
+    let totalScore = 0;
+    let count = 0;
+
+    feedbackState.criteriaScores.forEach((criteria) => {
+      if (criteria.score !== null) {
+        totalScore += criteria.score;
+        count++;
+      } else if (criteria.subScores.length > 0) {
+        const validSubScores = criteria.subScores.filter(
+          (sub) => sub.score !== null
+        );
+        if (validSubScores.length > 0) {
+          const subAverage =
+            validSubScores.reduce((sum, sub) => sum + (sub.score || 0), 0) /
+            validSubScores.length;
+          totalScore += subAverage;
           count++;
-        } else if (criteria.subScores.length > 0) {
-          const validSubScores = criteria.subScores.filter(
-            (sub) => sub.score !== null
-          );
-          if (validSubScores.length > 0) {
-            const subAverage =
-              validSubScores.reduce((sum, sub) => sum + (sub.score || 0), 0) /
-              validSubScores.length;
-            totalScore += subAverage;
-            count++;
-          }
         }
-      });
+      }
+    });
 
-      return count > 0 ? totalScore / count : 0;
-    }, [feedbackState.criteriaScores]);
+    return totalScore; // Return sum of all main criteria scores
+  }, [feedbackState.criteriaScores]);
 
-    // Check if all criteria have scores
-    const isComplete = useCallback(() => {
-      if (!selectedCase?.feedbackCriteria?.length) return false;
+  // Calculate maximum possible score for X/Y format display
+  const calculateMaxPossibleScore = useCallback(() => {
+    if (!selectedCase?.feedbackCriteria?.length) return 0;
+    return selectedCase.feedbackCriteria.length * 4; // Each criterion can score up to 4
+  }, [selectedCase?.feedbackCriteria]);
 
-      return feedbackState.criteriaScores.every((criteria) => {
-        if (criteria.subScores.length > 0) {
-          return criteria.subScores.every((sub) => sub.score !== null);
-        }
-        return criteria.score !== null;
-      });
-    }, [feedbackState.criteriaScores, selectedCase?.feedbackCriteria]);
+  // Check if all criteria have scores
+  const isComplete = useCallback(() => {
+    if (!selectedCase?.feedbackCriteria?.length) return false;
 
-    // Rating Button Component
-    const RatingButtons = ({
-      value,
-      onChange,
-      disabled = false,
-      label,
-    }: {
-      value: number | null;
-      onChange: (rating: number) => void;
-      disabled?: boolean;
-      label: string;
-    }) => {
-      const theme = useTheme();
+    return feedbackState.criteriaScores.every((criteria) => {
+      if (criteria.subScores.length > 0) {
+        return criteria.subScores.every((sub) => sub.score !== null);
+      }
+      return criteria.score !== null;
+    });
+  }, [feedbackState.criteriaScores, selectedCase?.feedbackCriteria]);
 
-      return (
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            {label}
-          </Typography>
-          <ToggleButtonGroup
-            value={value}
-            exclusive
-            onChange={(_, newValue) => onChange(newValue)}
-            disabled={disabled}
-            sx={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 1,
-              "& .MuiToggleButton-root": {
-                border: `1px solid ${theme.palette.divider}`,
-                borderRadius: "8px !important",
-                px: 2,
-                py: 1,
-                "&.Mui-selected": {
-                  backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                  color: theme.palette.primary.main,
-                  borderColor: theme.palette.primary.main,
-                  "&:hover": {
-                    backgroundColor: alpha(theme.palette.primary.main, 0.15),
-                  },
+  // Rating Button Component
+  const RatingButtons = ({
+    value,
+    onChange,
+    disabled = false,
+    label,
+  }: {
+    value: number | null;
+    onChange: (rating: number) => void;
+    disabled?: boolean;
+    label: string;
+  }) => {
+    const theme = useTheme();
+
+    // Debug: Log the current value prop
+    console.log(`🎯 RatingButtons for "${label}": value =`, value);
+
+    return (
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="subtitle2" gutterBottom>
+          {label}
+        </Typography>
+        <ToggleButtonGroup
+          value={value}
+          exclusive
+          onChange={(_, newValue) => {
+            console.log(
+              `🎯 ToggleButtonGroup onChange called for "${label}": newValue =`,
+              newValue,
+              "current value =",
+              value
+            );
+            // Prevent deselection - only allow changes to valid ratings
+            if (newValue !== null) {
+              console.log(`✅ Calling onChange with value:`, newValue);
+              onChange(newValue);
+            } else {
+              console.log(`❌ Ignoring null value (deselection attempt)`);
+            }
+          }}
+          disabled={disabled}
+          sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 1,
+            "& .MuiToggleButton-root": {
+              border: `1px solid ${theme.palette.divider}`,
+              borderRadius: "8px !important",
+              px: 2,
+              py: 1,
+              "&.Mui-selected": {
+                backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                color: theme.palette.primary.main,
+                borderColor: theme.palette.primary.main,
+                "&:hover": {
+                  backgroundColor: alpha(theme.palette.primary.main, 0.15),
                 },
               },
-            }}
-          >
-            {[1, 2, 3, 4, 5].map((rating) => (
-              <ToggleButton
-                key={rating}
-                value={rating}
-                aria-label={`${rating} stars`}
-              >
-                {rating}
-              </ToggleButton>
-            ))}
-          </ToggleButtonGroup>
-        </Box>
-      );
-    };
+            },
+          }}
+        >
+          {[0, 1, 2, 3, 4].map((rating) => (
+            <ToggleButton
+              key={rating}
+              value={rating}
+              aria-label={`${rating} stars`}
+            >
+              {rating}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      </Box>
+    );
+  };
 
-    // STABLE SUBMIT HANDLER - wrapped to include onSubmitSuccess callback
-    const handleSubmit = useCallback(async () => {
-      await onSubmit();
+  // STABLE SUBMIT HANDLER - wrapped to include onSubmitSuccess callback
+  const handleSubmit = useCallback(
+    async (startNewCase = false) => {
+      await onSubmit(startNewCase);
       if (onSubmitSuccess) {
         onSubmitSuccess();
       }
-    }, [onSubmit, onSubmitSuccess]);
+    },
+    [onSubmit, onSubmitSuccess]
+  );
 
-    // Always render during consultation and feedback phases, but control visibility
-    if (!visible || (phase !== "consultation" && phase !== "feedback")) {
-      return null;
+  // SUBMIT WITH NEW CASE HANDLER - includes observer validation
+  const handleSubmitWithNewCase = useCallback(async () => {
+    if (validateObserverFeedback) {
+      const canProceed = await validateObserverFeedback("newCase");
+      if (!canProceed) {
+        return; // Validation will handle showing dialog and eventual submission
+      }
     }
+    await handleSubmit(true);
+  }, [validateObserverFeedback, handleSubmit]);
 
-    // During consultation, show a note-taking interface
-    const isConsultationPhase = phase === "consultation";
-    const isFeedbackPhase = phase === "feedback";
-
-    if (hasSubmitted) {
-      return (
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom color="success.main">
-              Feedback Submitted
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Thank you for your feedback! Your input has been recorded.
-            </Typography>
-          </CardContent>
-        </Card>
-      );
+  // SUBMIT WITH ROLE CHANGE HANDLER - includes observer validation
+  const handleSubmitWithRoleChangeValidated = useCallback(async () => {
+    if (validateObserverFeedback) {
+      const canProceed = await validateObserverFeedback("roleChange");
+      if (!canProceed) {
+        return; // Validation will handle showing dialog and eventual submission
+      }
     }
+    if (onSubmitWithRoleChange) {
+      await onSubmitWithRoleChange();
+    }
+  }, [validateObserverFeedback, onSubmitWithRoleChange]);
 
+  // Always render during consultation and feedback phases, but control visibility
+  if (!visible || (phase !== "consultation" && phase !== "feedback")) {
+    return null;
+  }
+
+  // During consultation, show a note-taking interface
+  const isConsultationPhase = phase === "consultation";
+  const isFeedbackPhase = phase === "feedback";
+
+  if (hasSubmitted) {
     return (
       <Card>
         <CardContent>
-          <Typography variant="h6" gutterBottom>
-            {isConsultationPhase
-              ? "Live Feedback Rating"
-              : "Consultation Feedback"}
+          <Typography variant="h6" gutterBottom color="success.main">
+            Feedback Submitted
           </Typography>
-
-          {isConsultationPhase && (
-            <Alert severity="info" sx={{ mb: 3 }}>
-              You can rate in real-time during the consultation. Your ratings
-              are automatically saved. The Submit button will appear once the
-              consultation ends.
-            </Alert>
-          )}
-
-          {isFeedbackPhase && (
-            <Alert severity="success" sx={{ mb: 3 }}>
-              Consultation has ended. Please review your ratings and submit your
-              feedback.
-            </Alert>
-          )}
-
-          {/* Overall Performance Display */}
-          {selectedCase?.feedbackCriteria &&
-            selectedCase.feedbackCriteria.length > 0 && (
-              <Box sx={{ mb: 3, p: 2, bgcolor: "#f5f5f5", borderRadius: 1 }}>
-                <Typography variant="h6" gutterBottom>
-                  Overall Performance:{" "}
-                  {calculateOverallPerformance().toFixed(1)}/5.0
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Automatically calculated from the criteria below
-                </Typography>
-              </Box>
-            )}
-
-          {/* Dynamic Feedback Criteria */}
-          {selectedCase?.feedbackCriteria &&
-          selectedCase.feedbackCriteria.length > 0 ? (
-            <Grid container spacing={3}>
-              {selectedCase.feedbackCriteria
-                .sort((a, b) => a.order - b.order)
-                .map((criterion) => {
-                  const criteriaScore = feedbackState.criteriaScores.find(
-                    (score) => score.criterionId === criterion.id
-                  );
-
-                  return (
-                    <Grid item xs={12} key={criterion.id}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="h6" gutterBottom>
-                            {criterion.name}
-                          </Typography>
-
-                          {criterion.hasSubCriteria ? (
-                            // Render sub-criteria
-                            <Grid container spacing={2}>
-                              {criterion.subCriteria
-                                .sort((a, b) => a.order - b.order)
-                                .map((subCriterion) => {
-                                  const subScore =
-                                    criteriaScore?.subScores.find(
-                                      (sub) =>
-                                        sub.subCriterionId === subCriterion.id
-                                    );
-
-                                  return (
-                                    <Grid
-                                      item
-                                      xs={12}
-                                      md={6}
-                                      key={subCriterion.id}
-                                    >
-                                      <Box sx={{ mb: 2 }}>
-                                        <RatingButtons
-                                          value={subScore?.score || null}
-                                          onChange={(rating) =>
-                                            onFieldChange(
-                                              criterion.id,
-                                              rating,
-                                              subCriterion.id
-                                            )
-                                          }
-                                          disabled={false}
-                                          label={subCriterion.name}
-                                        />
-                                      </Box>
-                                    </Grid>
-                                  );
-                                })}
-
-                              {criterion.subCriteria.length > 0 && (
-                                <Grid item xs={12}>
-                                  <Box
-                                    sx={{
-                                      mt: 1,
-                                      p: 1,
-                                      bgcolor: "#fff3e0",
-                                      borderRadius: 1,
-                                    }}
-                                  >
-                                    <Typography
-                                      variant="caption"
-                                      color="textSecondary"
-                                    >
-                                      💡 This criterion's score will be
-                                      calculated as the average of its
-                                      sub-criteria
-                                    </Typography>
-                                  </Box>
-                                </Grid>
-                              )}
-                            </Grid>
-                          ) : (
-                            // Direct rating for criterion without sub-criteria
-                            <Box sx={{ mb: 2 }}>
-                              <RatingButtons
-                                value={criteriaScore?.score || null}
-                                onChange={(rating) =>
-                                  onFieldChange(criterion.id, rating)
-                                }
-                                disabled={false}
-                                label="Rating"
-                              />
-                              <Box
-                                sx={{
-                                  mt: 1,
-                                  p: 1,
-                                  bgcolor: "#e8f5e8",
-                                  borderRadius: 1,
-                                }}
-                              >
-                                <Typography
-                                  variant="caption"
-                                  color="textSecondary"
-                                >
-                                  ⭐ Direct 1-5 rating scale
-                                </Typography>
-                              </Box>
-                            </Box>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  );
-                })}
-            </Grid>
-          ) : (
-            <Alert severity="warning" sx={{ mb: 3 }}>
-              No feedback criteria defined for this case. Please contact the
-              administrator.
-            </Alert>
-          )}
-
-          {/* Additional Comments */}
-          <Box sx={{ mt: 3 }}>
-            <TextField
-              label="Additional Comments"
-              multiline
-              rows={4}
-              value={feedbackState.additionalComments}
-              onChange={handleCommentChange}
-              fullWidth
-              size="small"
-              placeholder="Any additional feedback or suggestions..."
-            />
-          </Box>
-
-          {/* Submit Button - Only show during feedback phase */}
-          {isFeedbackPhase && (
-            <Box
-              sx={{
-                mt: 3,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 2,
-              }}
-            >
-              <Box sx={{ display: "flex", gap: 2 }}>
-                <Button
-                  variant="contained"
-                  onClick={handleSubmit}
-                  disabled={!isComplete() || isSubmitting}
-                  size="large"
-                >
-                  {isSubmitting ? "Submitting..." : "Submit Feedback"}
-                </Button>
-              </Box>
-              {!isComplete() && (
-                <Typography
-                  variant="caption"
-                  color="error"
-                  sx={{
-                    textAlign: "center",
-                  }}
-                >
-                  Please provide ratings for all criteria before submitting
-                </Typography>
-              )}
-            </Box>
-          )}
-
-          {/* Status message during consultation */}
-          {isConsultationPhase && (
-            <Box sx={{ mt: 3, textAlign: "center" }}>
-              <Typography variant="body2" color="text.secondary">
-                Rate criteria in real-time during the consultation. Your ratings
-                are automatically saved. Submit button will appear when
-                consultation ends.
-              </Typography>
-            </Box>
-          )}
+          <Typography variant="body2" color="text.secondary">
+            Thank you for your feedback! Your input has been recorded.
+          </Typography>
         </CardContent>
       </Card>
     );
   }
-);
+
+  return (
+    <Card>
+      <CardContent>
+        <Typography variant="h6" gutterBottom>
+          {isConsultationPhase
+            ? "Live Feedback Rating"
+            : "Consultation Feedback"}
+        </Typography>
+
+        {isConsultationPhase && (
+          <Alert severity="info" sx={{ mb: 3 }}>
+            You can rate in real-time during the consultation. Your ratings are
+            automatically saved. The Submit button will appear once the
+            consultation ends.
+          </Alert>
+        )}
+
+        {isFeedbackPhase && (
+          <Alert severity="success" sx={{ mb: 3 }}>
+            Consultation has ended. Please review your ratings and submit your
+            feedback.
+          </Alert>
+        )}
+
+        {/* Overall Performance Display */}
+        {selectedCase?.feedbackCriteria &&
+          selectedCase.feedbackCriteria.length > 0 && (
+            <Box sx={{ mb: 3, p: 2, bgcolor: "#f5f5f5", borderRadius: 1 }}>
+              <Typography variant="h6" gutterBottom>
+                Overall Performance: {calculateOverallPerformance().toFixed(1)}/
+                {calculateMaxPossibleScore()}
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Sum of all main criteria scores (each rated 0-4)
+              </Typography>
+            </Box>
+          )}
+
+        {/* Dynamic Feedback Criteria */}
+        {selectedCase?.feedbackCriteria &&
+        selectedCase.feedbackCriteria.length > 0 ? (
+          <Grid container spacing={3}>
+            {selectedCase.feedbackCriteria
+              .sort((a, b) => a.order - b.order)
+              .map((criterion) => {
+                const criteriaScore = feedbackState.criteriaScores.find(
+                  (score) => score.criterionId === criterion.id
+                );
+
+                // Debug: Log the criteria score lookup
+                console.log(
+                  `🔍 Criterion "${criterion.name}" (${criterion.id}):`,
+                  {
+                    criteriaScore,
+                    currentScore: criteriaScore?.score,
+                    feedbackStateLength: feedbackState.criteriaScores.length,
+                  }
+                );
+
+                // Debug: Log all available criterion IDs for comparison
+                console.log(
+                  `🆔 Available criterion IDs in feedbackState:`,
+                  feedbackState.criteriaScores.map((score) => ({
+                    id: score.criterionId,
+                    name: score.criterionName,
+                  }))
+                );
+                console.log(
+                  `🎯 Looking for criterion ID: "${
+                    criterion.id
+                  }" (type: ${typeof criterion.id})`
+                );
+                console.log(
+                  `📋 All feedback criteria IDs: [${feedbackState.criteriaScores
+                    .map((s) => `"${s.criterionId}"`)
+                    .join(", ")}]`
+                );
+
+                return (
+                  <Grid item xs={12} key={criterion.id}>
+                    <Card variant="outlined">
+                      <CardContent>
+                        <Typography variant="h6" gutterBottom>
+                          {criterion.name}
+                        </Typography>
+
+                        {criterion.hasSubCriteria ? (
+                          // Render sub-criteria
+                          <Grid container spacing={2}>
+                            {criterion.subCriteria
+                              .sort((a, b) => a.order - b.order)
+                              .map((subCriterion) => {
+                                const subScore = criteriaScore?.subScores.find(
+                                  (sub) =>
+                                    sub.subCriterionId === subCriterion.id
+                                );
+
+                                return (
+                                  <Grid
+                                    item
+                                    xs={12}
+                                    md={6}
+                                    key={subCriterion.id}
+                                  >
+                                    <Box sx={{ mb: 2 }}>
+                                      <RatingButtons
+                                        value={subScore?.score ?? null}
+                                        onChange={(rating) =>
+                                          onFieldChange(
+                                            criterion.id,
+                                            rating,
+                                            subCriterion.id
+                                          )
+                                        }
+                                        disabled={false}
+                                        label={subCriterion.name}
+                                      />
+                                    </Box>
+                                  </Grid>
+                                );
+                              })}
+
+                            {criterion.subCriteria.length > 0 && (
+                              <Grid item xs={12}>
+                                <Box
+                                  sx={{
+                                    mt: 1,
+                                    p: 1,
+                                    bgcolor: "#fff3e0",
+                                    borderRadius: 1,
+                                  }}
+                                >
+                                  <Typography
+                                    variant="caption"
+                                    color="textSecondary"
+                                  >
+                                    💡 This criterion's score will be calculated
+                                    as the average of its sub-criteria
+                                  </Typography>
+                                </Box>
+                              </Grid>
+                            )}
+                          </Grid>
+                        ) : (
+                          // Direct rating for criterion without sub-criteria
+                          <Box sx={{ mb: 2 }}>
+                            <RatingButtons
+                              value={criteriaScore?.score ?? null}
+                              onChange={(rating) =>
+                                onFieldChange(criterion.id, rating)
+                              }
+                              disabled={false}
+                              label="Rating"
+                            />
+                            <Box
+                              sx={{
+                                mt: 1,
+                                p: 1,
+                                bgcolor: "#e8f5e8",
+                                borderRadius: 1,
+                              }}
+                            >
+                              <Typography
+                                variant="caption"
+                                color="textSecondary"
+                              >
+                                ⭐ Direct 0-4 rating scale
+                              </Typography>
+                            </Box>
+                          </Box>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                );
+              })}
+          </Grid>
+        ) : (
+          <Alert severity="warning" sx={{ mb: 3 }}>
+            No feedback criteria defined for this case. Please contact the
+            administrator.
+          </Alert>
+        )}
+
+        {/* Additional Comments */}
+        <Box sx={{ mt: 3 }}>
+          <TextField
+            label="Additional Comments"
+            multiline
+            rows={4}
+            value={feedbackState.additionalComments}
+            onChange={handleCommentChange}
+            fullWidth
+            size="small"
+            placeholder="Any additional feedback or suggestions..."
+          />
+        </Box>
+
+        {/* Submit Button - Only show during feedback phase */}
+        {isFeedbackPhase && (
+          <Box
+            sx={{
+              mt: 3,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                gap: 2,
+                flexWrap: "wrap",
+                justifyContent: "center",
+              }}
+            >
+              <Button
+                variant="contained"
+                onClick={() => handleSubmit(false)}
+                disabled={!isComplete() || isSubmitting}
+                size="large"
+              >
+                {isSubmitting ? "Submitting..." : "Submit Feedback"}
+              </Button>
+              {userRole !== "observer" && (
+                <Button
+                  variant="contained"
+                  onClick={handleSubmitWithNewCase}
+                  disabled={!isComplete() || isSubmitting}
+                  size="large"
+                  startIcon={<NewCaseIcon />}
+                >
+                  {isSubmitting ? "Submitting..." : "Submit & New Case"}
+                </Button>
+              )}
+              {userRole === "patient" && onSubmitWithRoleChange && (
+                <Button
+                  variant="contained"
+                  onClick={handleSubmitWithRoleChangeValidated}
+                  disabled={!isComplete() || isSubmitting}
+                  size="large"
+                  startIcon={<NewCaseIcon />}
+                  sx={{ bgcolor: "secondary.main" }}
+                >
+                  {isSubmitting ? "Submitting..." : "Submit & Role Change"}
+                </Button>
+              )}
+            </Box>
+            {!isComplete() && (
+              <Typography
+                variant="caption"
+                color="error"
+                sx={{
+                  textAlign: "center",
+                }}
+              >
+                Please provide ratings for all criteria before submitting
+              </Typography>
+            )}
+          </Box>
+        )}
+
+        {/* Status message during consultation */}
+        {isConsultationPhase && (
+          <Box sx={{ mt: 3, textAlign: "center" }}>
+            <Typography variant="body2" color="text.secondary">
+              Rate criteria in real-time during the consultation. Your ratings
+              are automatically saved. Submit button will appear when
+              consultation ends.
+            </Typography>
+          </Box>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
 // 🔧 MODULE-LEVEL PATIENT INFORMATION CARD - Extracted for reuse in ConsultationView
 interface PatientInformationCardProps {
@@ -754,25 +906,40 @@ interface PatientInformationCardProps {
     id: number;
     title: string;
     description: string;
-    scenario?: string;
+    // Doctor role specific content
+    doctorDescription?: string;
+    doctorScenario?: string;
+    doctorSections?: Array<{
+      id: string;
+      title: string;
+      content: string;
+      order: number;
+    }>;
+    // Patient/Observer role specific content
+    patientDescription?: string;
+    patientScenario?: string;
+    patientSections?: Array<{
+      id: string;
+      title: string;
+      content: string;
+      order: number;
+    }>;
+    // Common fields
     doctorRole?: string;
     patientRole?: string;
     doctorNotes?: string;
     patientNotes?: string;
     observerNotes?: string;
     imageUrl?: string;
+    visualData?: {
+      type: "image" | "text";
+      content: string;
+    };
     category: {
       id: number;
       name: string;
     };
-    difficulty?: string;
     duration?: number;
-    sections?: Array<{
-      id: string;
-      title: string;
-      content: string;
-      order: number;
-    }>;
   } | null;
 }
 
@@ -782,111 +949,105 @@ const PatientInformationCard: React.FC<PatientInformationCardProps> = ({
 }) => {
   const theme = useTheme();
   const [showImageModal, setShowImageModal] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   if (!selectedCase) return null;
 
-  const roleSpecificNotes = {
-    DOCTOR: selectedCase.doctorNotes,
-    PATIENT: selectedCase.patientNotes,
-    OBSERVER: selectedCase.observerNotes,
-  }[userRole];
+  // Get role-specific content
+  const description =
+    userRole.toLowerCase() === "doctor"
+      ? selectedCase.doctorDescription
+      : selectedCase.patientDescription;
+  const scenario =
+    userRole.toLowerCase() === "doctor"
+      ? selectedCase.doctorScenario
+      : selectedCase.patientScenario;
+  const sections =
+    userRole.toLowerCase() === "doctor"
+      ? selectedCase.doctorSections
+      : selectedCase.patientSections;
+  const roleSpecificNotes =
+    userRole.toLowerCase() === "doctor"
+      ? selectedCase.doctorNotes
+      : userRole.toLowerCase() === "patient"
+      ? selectedCase.patientNotes
+      : selectedCase.observerNotes;
 
   return (
-    <Card
-      elevation={0}
-      sx={{
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        backgroundColor: alpha(theme.palette.background.paper, 0.6),
-      }}
-    >
-      <CardContent
-        sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}
-      >
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            mb: 1,
-          }}
-        >
-          <Box>
+    <Card>
+      <CardContent>
+        <Box>
+          {userRole.toLowerCase() !== "doctor" && (
             <Typography variant="h6" gutterBottom>
               {selectedCase.title}
             </Typography>
-            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-              <Chip
-                size="small"
-                label={selectedCase.category.name}
-                sx={{
-                  backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                  color: theme.palette.primary.main,
-                }}
-              />
-              {selectedCase.difficulty && (
-                <Chip
-                  size="small"
-                  label={selectedCase.difficulty}
-                  sx={{
-                    backgroundColor: alpha(theme.palette.secondary.main, 0.1),
-                    color: theme.palette.secondary.main,
-                  }}
-                />
-              )}
-            </Box>
+          )}
+          <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+            <Chip
+              label={selectedCase.category.name}
+              size="small"
+              color="primary"
+              variant="outlined"
+            />
           </Box>
-          {selectedCase.imageUrl && (
-            <IconButton
-              onClick={() => setShowImageModal(true)}
-              sx={{
-                backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                "&:hover": {
-                  backgroundColor: alpha(theme.palette.primary.main, 0.2),
-                },
-              }}
-            >
-              <ImageIcon color="primary" />
-            </IconButton>
+
+          <Divider />
+
+          <Box>
+            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+              Description
+            </Typography>
+            <Typography variant="body2">
+              {description || selectedCase.description}
+            </Typography>
+          </Box>
+
+          {scenario && (
+            <Box sx={{ mt: 2 }}>
+              <Typography
+                variant="subtitle2"
+                color="text.secondary"
+                gutterBottom
+              >
+                Scenario
+              </Typography>
+              <Typography variant="body2">{scenario}</Typography>
+            </Box>
+          )}
+
+          {roleSpecificNotes && (
+            <Box sx={{ mt: 2 }}>
+              <Typography
+                variant="subtitle2"
+                color="text.secondary"
+                gutterBottom
+              >
+                {userRole.charAt(0).toUpperCase() + userRole.slice(1)} Notes
+              </Typography>
+              <Typography variant="body2">{roleSpecificNotes}</Typography>
+            </Box>
+          )}
+
+          {sections && sections.length > 0 && (
+            <Box sx={{ mt: 2 }}>
+              <Typography
+                variant="subtitle2"
+                color="text.secondary"
+                gutterBottom
+              >
+                Additional Information
+              </Typography>
+              {sections
+                .sort((a, b) => a.order - b.order)
+                .map((section) => (
+                  <Box key={section.id} sx={{ mb: 2 }}>
+                    <Typography variant="subtitle2">{section.title}</Typography>
+                    <Typography variant="body2">{section.content}</Typography>
+                  </Box>
+                ))}
+            </Box>
           )}
         </Box>
-
-        <Divider />
-
-        <Box>
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-            Scenario
-          </Typography>
-          <Typography variant="body2">
-            {selectedCase.scenario || selectedCase.description}
-          </Typography>
-        </Box>
-
-        {roleSpecificNotes && (
-          <Box>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              {userRole.charAt(0) + userRole.slice(1).toLowerCase()} Notes
-            </Typography>
-            <Typography variant="body2">{roleSpecificNotes}</Typography>
-          </Box>
-        )}
-
-        {selectedCase.sections && selectedCase.sections.length > 0 && (
-          <Box>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Additional Information
-            </Typography>
-            {selectedCase.sections
-              .sort((a, b) => a.order - b.order)
-              .map((section) => (
-                <Box key={section.id} sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2">{section.title}</Typography>
-                  <Typography variant="body2">{section.content}</Typography>
-                </Box>
-              ))}
-          </Box>
-        )}
       </CardContent>
 
       <Dialog
@@ -940,31 +1101,46 @@ interface ConsultationViewProps {
     giveFeedback: boolean;
   };
   onGiveFeedback: () => void;
-  showImageModal: boolean;
-  setShowImageModal: (show: boolean) => void;
+  showContentModal: boolean;
+  setShowContentModal: (show: boolean) => void;
   selectedCase?: {
     id: number;
     title: string;
     description: string;
-    scenario?: string;
+    // Doctor role specific content
+    doctorDescription?: string;
+    doctorScenario?: string;
+    doctorSections?: Array<{
+      id: string;
+      title: string;
+      content: string;
+      order: number;
+    }>;
+    // Patient/Observer role specific content
+    patientDescription?: string;
+    patientScenario?: string;
+    patientSections?: Array<{
+      id: string;
+      title: string;
+      content: string;
+      order: number;
+    }>;
+    // Common fields
     doctorRole?: string;
     patientRole?: string;
     doctorNotes?: string;
     patientNotes?: string;
     observerNotes?: string;
     imageUrl?: string;
+    visualData?: {
+      type: "image" | "text";
+      content: string;
+    };
     category: {
       id: number;
       name: string;
     };
-    difficulty?: string;
     duration?: number;
-    sections?: Array<{
-      id: string;
-      title: string;
-      content: string;
-      order: number;
-    }>;
   } | null;
 }
 
@@ -973,8 +1149,8 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({
   clientTimer,
   buttonStates,
   onGiveFeedback,
-  showImageModal,
-  setShowImageModal,
+  showContentModal,
+  setShowContentModal,
   selectedCase,
 }) => {
   const theme = useTheme();
@@ -999,14 +1175,18 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({
                 The consultation is now in progress
               </Typography>
 
-              <TimerDisplay clientTimer={clientTimer} />
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ mt: 1, textAlign: "center" }}
-              >
-                Time remaining for consultation
-              </Typography>
+              {userRole !== "doctor" && (
+                <>
+                  <TimerDisplay clientTimer={clientTimer} />
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mt: 1, textAlign: "center" }}
+                  >
+                    Time remaining for consultation
+                  </Typography>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -1016,15 +1196,16 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({
               <Typography variant="h6" gutterBottom>
                 Session Controls
               </Typography>
-              {selectedCase?.imageUrl && (
+              {(selectedCase?.visualData?.content ||
+                selectedCase?.imageUrl) && (
                 <Button
                   variant="outlined"
                   fullWidth
                   startIcon={<ImageIcon />}
-                  onClick={() => setShowImageModal(true)}
+                  onClick={() => setShowContentModal(true)}
                   sx={{ py: 1.5, mb: 1 }}
                 >
-                  View Patient Image
+                  View Patient Content
                 </Button>
               )}
               {userRole === "doctor" && (
@@ -1097,8 +1278,13 @@ const SessionRoomMain: React.FC = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [sessionEnded, setSessionEnded] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
-  const [showImageModal, setShowImageModal] = useState(false);
+  const [showContentModal, setShowContentModal] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [showObserverWarningDialog, setShowObserverWarningDialog] =
+    useState(false);
+  const [pendingSubmissionAction, setPendingSubmissionAction] = useState<
+    "newCase" | "roleChange" | null
+  >(null);
 
   // PERSISTENT FEEDBACK STATE - managed here to prevent loss during phase transitions
   const [persistentFeedbackState, setPersistentFeedbackState] =
@@ -1109,11 +1295,64 @@ const SessionRoomMain: React.FC = () => {
   const [persistentIsSubmitting, setPersistentIsSubmitting] = useState(false);
   const [persistentHasSubmitted, setPersistentHasSubmitted] = useState(false);
 
-  // Initialize feedback criteria scores when session data loads
+  // Track current round for feedback state reset
+  const [currentRound, setCurrentRound] = useState<number>(1);
+
+  // Reset feedback state when new round starts
   useEffect(() => {
     if (
+      sessionData?.currentRound &&
+      sessionData.currentRound !== currentRound
+    ) {
+      logger.log("🔄 New round detected, resetting feedback state", {
+        oldRound: currentRound,
+        newRound: sessionData.currentRound,
+      });
+
+      // Reset feedback state for new round
+      setPersistentFeedbackState({
+        criteriaScores: [],
+        additionalComments: "",
+      });
+      setPersistentHasSubmitted(false);
+      setPersistentIsSubmitting(false);
+
+      setCurrentRound(sessionData.currentRound);
+    }
+  }, [sessionData?.currentRound, currentRound]);
+
+  // Initialize feedback criteria scores when session data loads
+  useEffect(() => {
+    console.log("🔄 Feedback initialization useEffect triggered:", {
+      hasSelectedCase: !!sessionData?.selectedCase?.feedbackCriteria,
+      criteriaLength: sessionData?.selectedCase?.feedbackCriteria?.length || 0,
+      currentStateLength: persistentFeedbackState.criteriaScores.length,
+      shouldInitialize:
+        sessionData?.selectedCase?.feedbackCriteria &&
+        persistentFeedbackState.criteriaScores.length === 0,
+    });
+
+    // Always reinitialize if the criteria IDs don't match what we have in state
+    const currentCriteriaIds =
+      sessionData?.selectedCase?.feedbackCriteria?.map((c) => c.id) || [];
+    const stateCriteriaIds = persistentFeedbackState.criteriaScores.map(
+      (s) => s.criterionId
+    );
+    const idsMatch =
+      currentCriteriaIds.length > 0 &&
+      currentCriteriaIds.length === stateCriteriaIds.length &&
+      currentCriteriaIds.every((id) => stateCriteriaIds.includes(id));
+
+    console.log("🔍 ID comparison:", {
+      currentCriteriaIds,
+      stateCriteriaIds,
+      idsMatch,
+      shouldReinitialize: !idsMatch,
+    });
+
+    if (
       sessionData?.selectedCase?.feedbackCriteria &&
-      persistentFeedbackState.criteriaScores.length === 0
+      (!idsMatch || persistentFeedbackState.criteriaScores.length === 0)
     ) {
       const initialScores: FeedbackCriteriaScore[] =
         sessionData.selectedCase.feedbackCriteria.map((criterion) => ({
@@ -1126,6 +1365,16 @@ const SessionRoomMain: React.FC = () => {
             score: null,
           })),
         }));
+
+      console.log("🚀 Initializing feedback criteria scores:", {
+        criteriaFromCase: sessionData.selectedCase.feedbackCriteria.map(
+          (c) => ({ id: c.id, name: c.name })
+        ),
+        initialScores: initialScores.map((s) => ({
+          id: s.criterionId,
+          name: s.criterionName,
+        })),
+      });
 
       setPersistentFeedbackState((prev) => ({
         ...prev,
@@ -1140,10 +1389,16 @@ const SessionRoomMain: React.FC = () => {
   // SINGLE MEMOIZED HANDLER - prevents focus loss by providing stable reference
   const handleFieldChange = useCallback(
     (fieldName: string, value: string | number, subFieldId?: string) => {
-      console.log(
+      logger.log(
         `📝 Field changed: ${fieldName} = ${value}`,
         subFieldId ? `(sub: ${subFieldId})` : ""
       );
+
+      console.log(`🔧 handleFieldChange called with:`, {
+        fieldName,
+        value,
+        subFieldId,
+      });
 
       if (fieldName === "additionalComments") {
         setPersistentFeedbackState((prev) => ({
@@ -1183,7 +1438,86 @@ const SessionRoomMain: React.FC = () => {
   ); // Empty dependency array = stable reference forever
 
   // SUBMISSION HANDLER - also memoized for stability
-  const handleFeedbackSubmit = useCallback(async () => {
+  const handleFeedbackSubmit = useCallback(
+    async (startNewCase = false) => {
+      if (persistentIsSubmitting || persistentHasSubmitted) {
+        return;
+      }
+
+      // Check if all criteria have scores
+      const isComplete = persistentFeedbackState.criteriaScores.every(
+        (criteria) => {
+          if (criteria.subScores.length > 0) {
+            return criteria.subScores.every((sub) => sub.score !== null);
+          }
+          return criteria.score !== null;
+        }
+      );
+
+      if (!isComplete) {
+        logger.log("❌ Cannot submit: Not all criteria have scores");
+        return;
+      }
+
+      logger.log("🚀 Submitting feedback with stable handler...");
+      setPersistentIsSubmitting(true);
+
+      try {
+        const feedbackData = {
+          comment: persistentFeedbackState.additionalComments,
+          criteriaScores: persistentFeedbackState.criteriaScores.map(
+            (criteria) => ({
+              criterionId: criteria.criterionId,
+              criterionName: criteria.criterionName,
+              score: criteria.score,
+              subScores: criteria.subScores.map((sub) => ({
+                subCriterionId: sub.subCriterionId,
+                subCriterionName: sub.subCriterionName,
+                score: sub.score,
+              })),
+            })
+          ),
+          requestNewCase: startNewCase, // Add flag to indicate new case request
+        };
+
+        logger.log("📤 Feedback data being submitted:", feedbackData);
+        await submitFeedback(sessionCode!, feedbackData);
+
+        setPersistentHasSubmitted(true);
+        logger.log("✅ Feedback submitted successfully");
+
+        // Handle the flow based on startNewCase flag
+        if (startNewCase) {
+          // Stay in session to see the new case (for all roles)
+          logger.log(
+            "User submitted feedback with new case request - staying in session"
+          );
+          return;
+        }
+
+        // Normal submission flow - navigate to dashboard
+        disconnectWebSocket();
+        setTimeout(() => {
+          navigate("/dashboard");
+        }, 500);
+      } catch (error) {
+        logger.error("❌ Failed to submit feedback:", error);
+      } finally {
+        setPersistentIsSubmitting(false);
+      }
+    },
+    [
+      persistentIsSubmitting,
+      persistentHasSubmitted,
+      persistentFeedbackState,
+      sessionCode,
+      navigate,
+      userRole,
+    ]
+  );
+
+  // ROLE CHANGE SUBMISSION HANDLER - specifically for role swapping
+  const handleFeedbackSubmitWithRoleChange = useCallback(async () => {
     if (persistentIsSubmitting || persistentHasSubmitted) {
       return;
     }
@@ -1199,11 +1533,11 @@ const SessionRoomMain: React.FC = () => {
     );
 
     if (!isComplete) {
-      console.log("❌ Cannot submit: Not all criteria have scores");
+      logger.log("❌ Cannot submit: Not all criteria have scores");
       return;
     }
 
-    console.log("🚀 Submitting feedback with stable handler...");
+    logger.log("🚀 Submitting feedback with role change...");
     setPersistentIsSubmitting(true);
 
     try {
@@ -1221,23 +1555,25 @@ const SessionRoomMain: React.FC = () => {
             })),
           })
         ),
+        requestNewCase: true, // Always request new case for role change
+        requestRoleChange: true, // New flag to indicate role change request
       };
 
-      console.log("📤 Feedback data being submitted:", feedbackData);
+      logger.log(
+        "📤 Feedback data being submitted with role change:",
+        feedbackData
+      );
       await submitFeedback(sessionCode!, feedbackData);
 
       setPersistentHasSubmitted(true);
-      console.log("✅ Feedback submitted successfully");
+      logger.log("✅ Feedback submitted successfully with role change");
 
-      // Disconnect WebSocket and navigate to dashboard
-      disconnectWebSocket();
-
-      // Small delay to ensure cleanup, then navigate to dashboard
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 500);
+      // Stay in session to see the new case with swapped roles
+      logger.log(
+        "User submitted feedback with role change request - staying in session"
+      );
     } catch (error) {
-      console.error("❌ Failed to submit feedback:", error);
+      logger.error("❌ Failed to submit feedback with role change:", error);
     } finally {
       setPersistentIsSubmitting(false);
     }
@@ -1246,21 +1582,82 @@ const SessionRoomMain: React.FC = () => {
     persistentHasSubmitted,
     persistentFeedbackState,
     sessionCode,
-    navigate,
   ]);
+
+  // OBSERVER FEEDBACK VALIDATION FUNCTIONS
+  const checkObserverFeedbackStatus = useCallback(async () => {
+    if (!sessionCode)
+      return { hasObserver: false, observerHasGivenFeedback: true };
+
+    try {
+      const response = await getObserverFeedbackStatus(sessionCode);
+      return response.data;
+    } catch (error) {
+      logger.error("❌ Failed to check observer feedback status:", error);
+      // Return default safe values to not block submission
+      return { hasObserver: false, observerHasGivenFeedback: true };
+    }
+  }, [sessionCode]);
+
+  const validateObserverFeedbackBeforeSubmission = useCallback(
+    async (actionType: "newCase" | "roleChange") => {
+      // Only check for patient role submitting new case/role change
+      if (userRole !== "patient") {
+        return true; // Allow other roles to proceed normally
+      }
+
+      const observerStatus = await checkObserverFeedbackStatus();
+
+      // If there's an observer and they haven't given feedback, show warning
+      if (
+        observerStatus.hasObserver &&
+        !observerStatus.observerHasGivenFeedback
+      ) {
+        setPendingSubmissionAction(actionType);
+        setShowObserverWarningDialog(true);
+        return false; // Block submission until user decides
+      }
+
+      return true; // Allow submission to proceed
+    },
+    [userRole, checkObserverFeedbackStatus]
+  );
+
+  const handleObserverWarningContinue = useCallback(async () => {
+    setShowObserverWarningDialog(false);
+
+    // Execute the pending action
+    if (pendingSubmissionAction === "newCase") {
+      await handleFeedbackSubmit(true); // Submit with new case
+    } else if (pendingSubmissionAction === "roleChange") {
+      await handleFeedbackSubmitWithRoleChange(); // Submit with role change
+    }
+
+    setPendingSubmissionAction(null);
+  }, [
+    pendingSubmissionAction,
+    handleFeedbackSubmit,
+    handleFeedbackSubmitWithRoleChange,
+  ]);
+
+  const handleObserverWarningWait = useCallback(() => {
+    setShowObserverWarningDialog(false);
+    setPendingSubmissionAction(null);
+    // Do nothing - just close dialog and wait
+  }, []);
 
   // Note: stableFeedbackProps will be defined after handleCompleteSession
 
   // Debug: Track feedback state preservation (reduced logging to prevent spam)
   useEffect(() => {
     if (sessionData?.phase) {
-      console.log("🔄 Main component: Phase changed to", sessionData.phase);
-      console.log(
+      logger.log("🔄 Main component: Phase changed to", sessionData.phase);
+      logger.log(
         "💾 Persistent feedback state preserved:",
         persistentFeedbackState.criteriaScores.length > 0 ||
           persistentFeedbackState.additionalComments.length > 0
       );
-      console.log(
+      logger.log(
         "📊 Criteria scores count:",
         persistentFeedbackState.criteriaScores.length
       );
@@ -1299,47 +1696,14 @@ const SessionRoomMain: React.FC = () => {
     setButtonStates((prev) => ({ ...prev, startSession: true }));
 
     try {
-      console.log("Starting session:", sessionCode);
+      logger.log("Starting session:", sessionCode);
       await startSession(sessionCode);
-      console.log("Session started successfully");
+      logger.log("Session started successfully");
 
-      // If WebSocket is not working, poll for session updates
-      setTimeout(async () => {
-        try {
-          const response = await getSessionByCode(sessionCode);
-          const session = response.data;
-
-          // Update session data with new phase and case
-          setSessionData((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  phase: session.phase?.toLowerCase() || prev.phase,
-                  participants: session.participants || prev.participants,
-                  selectedCase: session.selectedCase || prev.selectedCase,
-                }
-              : null
-          );
-
-          // Start timer if in reading phase
-          if (
-            session.phase?.toLowerCase() === "reading" &&
-            session.readingTime
-          ) {
-            console.log("Starting timer from polling response");
-            clientTimer.startClientTimer(
-              session.readingTime * 60,
-              Date.now(),
-              "reading"
-            );
-          }
-        } catch (pollError) {
-          console.error("Failed to poll session updates:", pollError);
-          setError("Failed to get session updates. Please refresh the page.");
-        }
-      }, 1000);
+      // WebSocket will handle the session updates automatically
+      // No need for polling since we have real-time updates
     } catch (error: any) {
-      console.error("Failed to start session:", error);
+      logger.error("Failed to start session:", error);
       setError(
         error.response?.data?.error ||
           error.message ||
@@ -1349,16 +1713,16 @@ const SessionRoomMain: React.FC = () => {
       // Reset button loading state
       setButtonStates((prev) => ({ ...prev, startSession: false }));
     }
-  }, [sessionCode, user, clientTimer]);
+  }, [sessionCode, user]);
 
   const handleSkipToConsultation = useCallback(async () => {
     if (!sessionCode || !sessionData) return;
     try {
-      console.log("Skipping to consultation phase:", sessionCode);
+      logger.log("Skipping to consultation phase:", sessionCode);
       await skipPhase(sessionCode);
-      console.log("Phase skipped successfully");
+      logger.log("Phase skipped successfully");
     } catch (error: any) {
-      console.error("Failed to skip phase:", error);
+      logger.error("Failed to skip phase:", error);
       setError(
         error.response?.data?.error ||
           error.message ||
@@ -1374,14 +1738,14 @@ const SessionRoomMain: React.FC = () => {
     setButtonStates((prev) => ({ ...prev, newCase: true }));
 
     try {
-      console.log("Requesting new case for session:", sessionData.sessionCode);
+      logger.log("Requesting new case for session:", sessionData.sessionCode);
       await requestNewCase(sessionData.sessionCode);
-      console.log("New case requested successfully");
+      logger.log("New case requested successfully");
 
       // The WebSocket handler will update the session data with the new case
       // and trigger the phase change automatically
     } catch (error: any) {
-      console.error("Failed to request new case:", error);
+      logger.error("Failed to request new case:", error);
       setError(
         error.response?.data?.error || error.message || "Failed to get new case"
       );
@@ -1398,9 +1762,9 @@ const SessionRoomMain: React.FC = () => {
     setButtonStates((prev) => ({ ...prev, giveFeedback: true }));
 
     try {
-      console.log("Doctor ending consultation and moving to feedback phase");
+      logger.log("Doctor ending consultation and moving to feedback phase");
       await skipPhase(sessionData.sessionCode);
-      console.log("Successfully transitioned to feedback phase");
+      logger.log("Successfully transitioned to feedback phase");
 
       // Stop the consultation timer
       clientTimer.stopClientTimer();
@@ -1417,7 +1781,7 @@ const SessionRoomMain: React.FC = () => {
         };
       });
     } catch (error) {
-      console.error("Failed to transition to feedback phase:", error);
+      logger.error("Failed to transition to feedback phase:", error);
       setError("Failed to transition to feedback phase. Please try again.");
     } finally {
       // Reset button loading state
@@ -1427,7 +1791,7 @@ const SessionRoomMain: React.FC = () => {
 
   const handleSubmitFeedback = useCallback(async () => {
     // This is a placeholder - the actual feedback submission is handled by IndependentFeedbackComponent
-    console.log("Submit feedback called from main component");
+    logger.log("Submit feedback called from main component");
   }, []);
 
   // STABLE PROPS OBJECT - memoized to prevent unnecessary re-renders
@@ -1438,16 +1802,22 @@ const SessionRoomMain: React.FC = () => {
       isSubmitting: persistentIsSubmitting,
       hasSubmitted: persistentHasSubmitted,
       selectedCase: sessionData?.selectedCase,
+      userRole: userRole,
       onFieldChange: handleFieldChange,
       onSubmit: handleFeedbackSubmit,
+      onSubmitWithRoleChange: handleFeedbackSubmitWithRoleChange,
+      validateObserverFeedback: validateObserverFeedbackBeforeSubmission,
     }),
     [
       persistentFeedbackState,
       persistentIsSubmitting,
       persistentHasSubmitted,
       sessionData?.selectedCase,
+      userRole,
       handleFieldChange,
       handleFeedbackSubmit,
+      handleFeedbackSubmitWithRoleChange,
+      validateObserverFeedbackBeforeSubmission,
     ]
   );
 
@@ -1462,7 +1832,7 @@ const SessionRoomMain: React.FC = () => {
         if (sessionData?.phase === "feedback") {
           // Feedback phase'de individual completion yap
           await completeSession(sessionCode);
-          console.log("Individual session completed via exit");
+          logger.log("Individual session completed via exit");
         } else {
           // Diğer phase'lerde normal leave session
           await leaveSession(sessionCode);
@@ -1470,7 +1840,7 @@ const SessionRoomMain: React.FC = () => {
       }
       disconnectWebSocket();
     } catch (error) {
-      console.error("Error exiting session:", error);
+      logger.error("Error exiting session:", error);
     }
     navigate("/dashboard");
   }, [sessionCode, sessionData?.phase, navigate]);
@@ -1498,13 +1868,13 @@ const SessionRoomMain: React.FC = () => {
         const response = await getSessionByCode(sessionCode);
         const session = response.data;
 
-        console.log("Session data received:", session);
+        logger.log("Session data received:", session);
 
         // Update user role from backend if available
         if (session.userRole) {
           const backendRole = session.userRole.toLowerCase() as SessionRole;
           if (backendRole !== userRole) {
-            console.log("Updating user role from backend:", backendRole);
+            logger.log("Updating user role from backend:", backendRole);
             setUserRole(backendRole);
           }
         }
@@ -1513,6 +1883,7 @@ const SessionRoomMain: React.FC = () => {
           sessionCode: session.code,
           title: session.title,
           phase: session.phase?.toLowerCase() || "waiting",
+          currentRound: session.currentRound || 1, // Add currentRound
           participants: session.participants || [],
           config: {
             readingTime: session.readingTime || 2,
@@ -1545,7 +1916,7 @@ const SessionRoomMain: React.FC = () => {
           const elapsedSeconds = totalDurationSeconds - remainingSeconds;
           const startTimestamp = Date.now() - elapsedSeconds * 1000;
 
-          console.log("Resume timer:", {
+          logger.log("Resume timer:", {
             phase: initialSessionData.phase,
             totalDurationSeconds,
             remainingSeconds,
@@ -1561,40 +1932,77 @@ const SessionRoomMain: React.FC = () => {
         }
 
         // Set up WebSocket connection with error handling
-        console.log("Setting up WebSocket for session:", sessionCode);
+        logger.log("Setting up WebSocket for session:", sessionCode);
         try {
           connectWebSocket(sessionCode, {
             onSessionUpdate: (data) => {
-              console.log("Session update received:", data);
+              logger.log("Session update received:", data);
               setSessionData((prev) => {
                 if (!prev) return null;
+
+                // Check if the current user's role has changed
+                const currentUserId = user?.id;
+                if (currentUserId && data.participants && prev.participants) {
+                  const currentUserParticipant = data.participants.find(
+                    (p: any) =>
+                      p.userId === currentUserId ||
+                      p.id === currentUserId.toString()
+                  );
+                  const prevUserParticipant = prev.participants.find(
+                    (p: any) =>
+                      p.userId === currentUserId ||
+                      p.id === currentUserId.toString()
+                  );
+
+                  if (currentUserParticipant && prevUserParticipant) {
+                    const newRole = currentUserParticipant.role;
+                    const oldRole = prevUserParticipant.role;
+
+                    if (newRole !== oldRole) {
+                      logger.log(
+                        `🔄 User role changed from ${oldRole} to ${newRole}`
+                      );
+                      setUserRole(newRole);
+                    }
+                  }
+                }
+
                 return {
                   ...prev,
                   phase: data.phase?.toLowerCase() || prev.phase,
+                  currentRound: data.currentRound || prev.currentRound,
                   participants: data.participants || prev.participants,
+                  selectedCase: data.selectedCase
+                    ? { ...data.selectedCase }
+                    : prev.selectedCase,
                 };
               });
             },
             onParticipantUpdate: (participants) => {
-              console.log("Participant update received:", participants);
+              logger.log("Participant update received:", participants);
               setSessionData((prev) =>
                 prev ? { ...prev, participants } : null
               );
             },
             onPhaseChange: (data) => {
-              console.log("Phase change received:", data);
+              logger.log("Phase change received:", data);
 
               // Force a re-render by creating a new object
               setSessionData((prev) => {
                 if (!prev) return null;
+
+                // Get the latest case data from the session update
+                const updatedCase = data.selectedCase
+                  ? { ...data.selectedCase }
+                  : prev.selectedCase;
+
                 return {
                   ...prev,
                   phase: data.phase.toLowerCase(),
+                  currentRound: data.currentRound || prev.currentRound,
                   participants: [...(prev.participants || [])],
                   config: { ...prev.config },
-                  selectedCase: prev.selectedCase
-                    ? { ...prev.selectedCase }
-                    : null,
+                  selectedCase: updatedCase,
                 };
               });
 
@@ -1603,7 +2011,7 @@ const SessionRoomMain: React.FC = () => {
 
               // Start timer if duration is provided
               if (data.durationSeconds && data.durationSeconds > 0) {
-                console.log(
+                logger.log(
                   "Starting client-side timer for phase:",
                   data.phase,
                   "duration:",
@@ -1619,7 +2027,7 @@ const SessionRoomMain: React.FC = () => {
               }
             },
             onTimerStart: (data) => {
-              console.log("Timer start received:", data);
+              logger.log("Timer start received:", data);
               if (data.durationSeconds && data.startTimestamp) {
                 clientTimer.startClientTimer(
                   data.durationSeconds,
@@ -1629,20 +2037,25 @@ const SessionRoomMain: React.FC = () => {
               }
             },
             onSessionEnded: (data) => {
-              console.log("Session ended message received:", data);
+              logger.log("Session ended message received:", data);
               clientTimer.stopClientTimer();
               handleSessionEnded(data.reason || "Session has ended");
             },
+            onRoleChange: (data) => {
+              logger.log("Role change notification received:", data);
+              // Role change detection is now handled in onSessionUpdate
+              // This handler just logs the notification message
+            },
           });
         } catch (wsError) {
-          console.error(
+          logger.error(
             "Failed to setup WebSocket, continuing without real-time updates:",
             wsError
           );
           // Continue without WebSocket - session will still work with manual refresh
         }
       } catch (error) {
-        console.error("Failed to load session:", error);
+        logger.error("Failed to load session:", error);
         setError("Failed to load session data");
       } finally {
         setLoading(false);
@@ -1655,7 +2068,7 @@ const SessionRoomMain: React.FC = () => {
       try {
         disconnectWebSocket();
       } catch (error) {
-        console.error("Error during WebSocket cleanup:", error);
+        logger.error("Error during WebSocket cleanup:", error);
       }
     };
   }, [sessionCode, handleSessionEnded]); // Removed clientTimer dependency to prevent infinite loops
@@ -1864,15 +2277,16 @@ const SessionRoomMain: React.FC = () => {
                 Session Controls
               </Typography>
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                {sessionData?.selectedCase?.imageUrl && (
+                {(sessionData?.selectedCase?.visualData?.content ||
+                  sessionData?.selectedCase?.imageUrl) && (
                   <Button
                     variant="outlined"
                     fullWidth
                     startIcon={<ImageIcon />}
-                    onClick={() => setShowImageModal(true)}
+                    onClick={() => setShowContentModal(true)}
                     sx={{ py: 1.5 }}
                   >
-                    View Patient Image
+                    View Patient Content
                   </Button>
                 )}
                 <Button
@@ -1960,7 +2374,8 @@ const SessionRoomMain: React.FC = () => {
                 </CardContent>
               </Card>
 
-              {sessionData?.selectedCase?.imageUrl && (
+              {(sessionData?.selectedCase?.visualData?.content ||
+                sessionData?.selectedCase?.imageUrl) && (
                 <Card sx={{ mt: 2 }}>
                   <CardContent>
                     <Typography variant="h6" gutterBottom>
@@ -1970,36 +2385,20 @@ const SessionRoomMain: React.FC = () => {
                       variant="outlined"
                       fullWidth
                       startIcon={<ImageIcon />}
-                      onClick={() => setShowImageModal(true)}
+                      onClick={() => setShowContentModal(true)}
                       sx={{ py: 1.5 }}
                     >
-                      View Patient Image
+                      View Patient Content
                     </Button>
                   </CardContent>
                 </Card>
               )}
-
-              <Card sx={{ mt: 2 }}>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    Your Role:{" "}
-                    {userRole?.charAt(0).toUpperCase() + userRole?.slice(1)}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {userRole === "patient"
-                      ? "You will role-play as the patient during the consultation. Review your background and symptoms above."
-                      : userRole === "observer"
-                      ? "You will observe the consultation and provide feedback. Review the case details above."
-                      : "You are participating in this practice session"}
-                  </Typography>
-                </CardContent>
-              </Card>
             </Grid>
           </Grid>
         </Container>
       );
     },
-    [sessionData, userRole, clientTimer]
+    [userRole, sessionData?.selectedCase, clientTimer]
   );
 
   // Memoized doctor feedback view to prevent re-creation
@@ -2064,8 +2463,8 @@ const SessionRoomMain: React.FC = () => {
             clientTimer={clientTimer}
             buttonStates={buttonStates}
             onGiveFeedback={handleGiveFeedback}
-            showImageModal={showImageModal}
-            setShowImageModal={setShowImageModal}
+            showContentModal={showContentModal}
+            setShowContentModal={setShowContentModal}
             selectedCase={sessionData.selectedCase}
           />
           {/* STABLE Feedback Component for Patient and Observer - Rendered separately to prevent parent re-renders */}
@@ -2077,7 +2476,19 @@ const SessionRoomMain: React.FC = () => {
                 phase={sessionData.phase}
                 onSubmitSuccess={handleSubmitFeedback}
                 visible={true}
-                {...stableFeedbackProps}
+                feedbackState={stableFeedbackProps.feedbackState}
+                isSubmitting={stableFeedbackProps.isSubmitting}
+                hasSubmitted={stableFeedbackProps.hasSubmitted}
+                selectedCase={stableFeedbackProps.selectedCase}
+                userRole={stableFeedbackProps.userRole}
+                onFieldChange={stableFeedbackProps.onFieldChange}
+                onSubmit={stableFeedbackProps.onSubmit}
+                onSubmitWithRoleChange={
+                  stableFeedbackProps.onSubmitWithRoleChange
+                }
+                validateObserverFeedback={
+                  stableFeedbackProps.validateObserverFeedback
+                }
               />
             </Container>
           )}
@@ -2098,7 +2509,19 @@ const SessionRoomMain: React.FC = () => {
               phase={sessionData.phase}
               onSubmitSuccess={handleSubmitFeedback}
               visible={true}
-              {...stableFeedbackProps}
+              feedbackState={stableFeedbackProps.feedbackState}
+              isSubmitting={stableFeedbackProps.isSubmitting}
+              hasSubmitted={stableFeedbackProps.hasSubmitted}
+              selectedCase={stableFeedbackProps.selectedCase}
+              userRole={stableFeedbackProps.userRole}
+              onFieldChange={stableFeedbackProps.onFieldChange}
+              onSubmit={stableFeedbackProps.onSubmit}
+              onSubmitWithRoleChange={
+                stableFeedbackProps.onSubmitWithRoleChange
+              }
+              validateObserverFeedback={
+                stableFeedbackProps.validateObserverFeedback
+              }
             />
           </Container>
         );
@@ -2262,10 +2685,10 @@ const SessionRoomMain: React.FC = () => {
       {/* Main Content */}
       <Box sx={{ p: 3 }}>{renderMainContent()}</Box>
 
-      {/* Patient Image Modal */}
+      {/* Patient Content Modal */}
       <Dialog
-        open={showImageModal}
-        onClose={() => setShowImageModal(false)}
+        open={showContentModal}
+        onClose={() => setShowContentModal(false)}
         maxWidth="md"
         fullWidth
       >
@@ -2275,59 +2698,106 @@ const SessionRoomMain: React.FC = () => {
             justifyContent="space-between"
             alignItems="center"
           >
-            <Typography variant="h6">Patient Image</Typography>
-            <IconButton onClick={() => setShowImageModal(false)}>
+            <Typography variant="h6">
+              {sessionData?.selectedCase?.visualData?.type === "text"
+                ? "Patient Information"
+                : "Patient Image"}
+            </Typography>
+            <IconButton onClick={() => setShowContentModal(false)}>
               <CloseIcon />
             </IconButton>
           </Box>
         </DialogTitle>
         <DialogContent>
           <Box display="flex" justifyContent="center" alignItems="center" p={2}>
-            {sessionData?.selectedCase?.imageUrl && !imageError ? (
-              <img
-                src={
-                  sessionData.selectedCase.imageUrl?.startsWith("http")
-                    ? sessionData.selectedCase.imageUrl
-                    : `${
-                        import.meta.env.VITE_API_URL ||
-                        "http://localhost:8080/api"
-                      }${sessionData.selectedCase.imageUrl}`
-                }
-                alt="Patient image"
-                style={{
-                  maxWidth: "100%",
-                  maxHeight: "70vh",
-                  objectFit: "contain",
-                }}
-                onError={() => {
-                  setImageError(true);
-                }}
-              />
-            ) : (
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  minHeight: "200px",
-                  backgroundColor: "#f5f5f5",
-                  borderRadius: 1,
-                  flexDirection: "column",
-                  gap: 1,
-                }}
-              >
-                <ImageIcon sx={{ fontSize: 48, color: "#999" }} />
-                <Typography variant="body2" color="text.secondary">
-                  Image could not be loaded
-                </Typography>
-              </Box>
-            )}
+            {(() => {
+              const visualData = sessionData?.selectedCase?.visualData;
+              const imageUrl = sessionData?.selectedCase?.imageUrl;
+
+              // Use visualData if available, otherwise fall back to imageUrl
+              if (visualData?.type === "text" && visualData.content) {
+                return (
+                  <Box sx={{ width: "100%", p: 2 }}>
+                    <Typography
+                      variant="body1"
+                      sx={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}
+                    >
+                      {visualData.content}
+                    </Typography>
+                  </Box>
+                );
+              } else if (
+                (visualData?.type === "image" && visualData.content) ||
+                imageUrl
+              ) {
+                const imageSrc = visualData?.content || imageUrl;
+                return !imageError ? (
+                  <img
+                    src={
+                      imageSrc?.startsWith("http")
+                        ? imageSrc
+                        : `${
+                            import.meta.env.VITE_API_URL ||
+                            "http://localhost:8080/api"
+                          }${imageSrc}`
+                    }
+                    alt="Patient image"
+                    style={{
+                      maxWidth: "100%",
+                      maxHeight: "70vh",
+                      objectFit: "contain",
+                    }}
+                    onError={() => {
+                      setImageError(true);
+                    }}
+                  />
+                ) : (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      minHeight: "200px",
+                      backgroundColor: "#f5f5f5",
+                      borderRadius: 1,
+                      flexDirection: "column",
+                      gap: 1,
+                    }}
+                  >
+                    <ImageIcon sx={{ fontSize: 48, color: "#999" }} />
+                    <Typography variant="body2" color="text.secondary">
+                      Image could not be loaded
+                    </Typography>
+                  </Box>
+                );
+              } else {
+                return (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      minHeight: "200px",
+                      backgroundColor: "#f5f5f5",
+                      borderRadius: 1,
+                      flexDirection: "column",
+                      gap: 1,
+                    }}
+                  >
+                    <ImageIcon sx={{ fontSize: 48, color: "#999" }} />
+                    <Typography variant="body2" color="text.secondary">
+                      No content available
+                    </Typography>
+                  </Box>
+                );
+              }
+            })()}
           </Box>
         </DialogContent>
         <DialogActions>
           <Button
             onClick={() => {
-              setShowImageModal(false);
+              setShowContentModal(false);
               setImageError(false); // Reset error state when closing modal
             }}
             variant="contained"
@@ -2357,6 +2827,34 @@ const SessionRoomMain: React.FC = () => {
             {sessionData?.phase === "feedback"
               ? "Complete My Session"
               : "Exit Session"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Observer Feedback Warning Dialog */}
+      <Dialog
+        open={showObserverWarningDialog}
+        onClose={() => setShowObserverWarningDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Observer Feedback Pending</DialogTitle>
+        <DialogContent>
+          <Typography>
+            The observer has not submitted their feedback yet. Do you want to
+            wait for their feedback or continue anyway?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleObserverWarningWait} variant="outlined">
+            Wait
+          </Button>
+          <Button
+            onClick={handleObserverWarningContinue}
+            color="primary"
+            variant="contained"
+          >
+            Continue Anyway
           </Button>
         </DialogActions>
       </Dialog>

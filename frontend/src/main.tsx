@@ -7,6 +7,7 @@ import CssBaseline from "@mui/material/CssBaseline";
 import { store } from "./store";
 import { theme } from "./utils/theme";
 import App from "./App";
+import "./index.css"; // Import Tailwind CSS styles
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

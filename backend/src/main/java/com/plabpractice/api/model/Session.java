@@ -56,6 +56,9 @@ public class Session {
     @JoinColumn(name = "case_id")
     private Case selectedCase;
 
+    @Column(name = "current_round", nullable = false)
+    private Integer currentRound = 1; // Track which round/case iteration we're on
+
     @Column(name = "time_remaining", nullable = false)
     private Integer timeRemaining = 0; // in seconds
 

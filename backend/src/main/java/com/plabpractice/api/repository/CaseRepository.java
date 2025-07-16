@@ -12,8 +12,6 @@ import java.util.List;
 public interface CaseRepository extends JpaRepository<Case, Long> {
     List<Case> findByCategoryId(Long categoryId);
 
-    List<Case> findByDifficulty(Case.Difficulty difficulty);
-
     List<Case> findByCategoryName(String categoryName);
 
     List<Case> findByCategoryNameIn(List<String> categoryNames);
@@ -22,4 +20,7 @@ public interface CaseRepository extends JpaRepository<Case, Long> {
 
     @Query("SELECT DISTINCT c FROM Case c JOIN c.topics t WHERE t IN :topics")
     List<Case> findByAnyTopicIn(@Param("topics") List<String> topics);
+
+    // Recall-specific queries
+    List<Case> findByIsRecallCaseTrue();
 }

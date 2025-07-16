@@ -45,6 +45,7 @@ export const connectWebSocket = (sessionCode: string, handlers: {
   onMessage?: (message: any) => void;
   onSessionEnded?: (data: any) => void;
   onUserLeft?: (data: any) => void;
+  onRoleChange?: (data: any) => void;
 }) => {
   // Prevent multiple connection attempts
   if (isConnecting || (stompClient && stompClient.connected)) {
@@ -83,9 +84,12 @@ export const connectWebSocket = (sessionCode: string, handlers: {
     heartbeatIncoming: 4000,
     heartbeatOutgoing: 4000,
     debug: (str) => {
-      // Reduce debug spam
-      if (!str.includes('>>>') && !str.includes('<<<')) {
-        console.log('STOMP Debug:', str);
+      // Only enable debug in development
+      if (import.meta.env.DEV) {
+        // Reduce debug spam
+        if (!str.includes('>>>') && !str.includes('<<<')) {
+          console.log('STOMP Debug:', str);
+        }
       }
     },
     onConnect: (frame) => {
@@ -123,6 +127,10 @@ export const connectWebSocket = (sessionCode: string, handlers: {
             case 'USER_LEFT':
               console.log('User left received:', data);
               handlers.onUserLeft?.(data);
+              break;
+            case 'ROLE_CHANGE':
+              console.log('Role change received:', data);
+              handlers.onRoleChange?.(data);
               break;
             default:
               console.log('Unknown message type:', data.type, data);
@@ -287,7 +295,7 @@ export const requestNewCase = (sessionCode: string) =>
   api.post(`/sessions/${sessionCode}/new-case`);
 
 export const getCategories = () =>
-  api.get('/cases/categories');
+  api.get('/categories');
 
 // Feedback API
 export const submitFeedback = async (sessionCode: string, feedbackData: {
@@ -331,11 +339,28 @@ export const submitFeedback = async (sessionCode: string, feedbackData: {
   }
 };
 
+// Recall API methods
+export const getAllRecallCases = () =>
+  api.get('/cases/recall');
+
+export const getAllRecallDates = () =>
+  api.get('/cases/recall/dates');
+
+export const getRecallCasesByDate = (date: string) =>
+  api.get(`/cases/recall/by-date?date=${date}`);
+
+export const getRandomRecallCase = (date: string) =>
+  api.get(`/cases/recall/random?date=${date}`);
+
 export const getReceivedFeedback = () =>
   api.get('/feedback/received');
 
 export const getSessionFeedback = (sessionCode: string) =>
   api.get(`/feedback/session/${sessionCode}`);
+
+// Session observer feedback status check
+export const getObserverFeedbackStatus = (sessionCode: string) =>
+  api.get(`/sessions/${sessionCode}/observer-feedback-status`);
 
 // Export api as named export to fix import errors
 export { api };
