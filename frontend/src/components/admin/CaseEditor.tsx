@@ -66,19 +66,10 @@ interface CaseData {
   description: string;
   category: any;
   // Doctor role specific content
-  doctorDescription?: string;
-  doctorScenario?: string;
   doctorSections: CaseSection[];
   // Patient/Observer role specific content
-  patientDescription?: string;
-  patientScenario?: string;
   patientSections: CaseSection[];
   // Common fields
-  doctorRole?: string;
-  patientRole?: string;
-  observerNotes?: string;
-  learningObjectives?: string;
-  duration?: number;
   doctorNotes?: string;
   patientNotes?: string;
   visualData?: CaseVisualData;
@@ -107,11 +98,7 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
     title: "",
     description: "",
     category: null,
-    doctorDescription: "",
-    doctorScenario: "",
     doctorSections: [],
-    patientDescription: "",
-    patientScenario: "",
     patientSections: [],
     visualData: { type: "image", content: "" },
     feedbackCriteria: [],
@@ -149,11 +136,7 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
         title: "",
         description: "",
         category: null,
-        doctorDescription: "",
-        doctorScenario: "",
         doctorSections: [],
-        patientDescription: "",
-        patientScenario: "",
         patientSections: [],
         visualData: { type: "image", content: "" },
         feedbackCriteria: [],
@@ -261,7 +244,6 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
         }
       } catch (error) {
         setUploadError("Error occurred while uploading file");
-        console.error("Upload error:", error);
       } finally {
         setUploading(false);
         // Reset input value so same file can be selected again
@@ -486,9 +468,7 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
     try {
       await onSave(formData);
       onClose();
-    } catch (error) {
-      console.error("Failed to save case:", error);
-    }
+    } catch (error) {}
   };
 
   return (
@@ -532,17 +512,6 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
                     ))}
                   </Select>
                 </FormControl>
-
-                <TextField
-                  fullWidth
-                  type="number"
-                  label="Duration (minutes)"
-                  value={formData.duration || ""}
-                  onChange={(e) =>
-                    handleBasicFieldChange("duration", parseInt(e.target.value))
-                  }
-                  InputProps={{ inputProps: { min: 1, max: 60 } }}
-                />
               </Box>
             </CardContent>
           </Card>
@@ -659,28 +628,6 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
                 Doctor's View
               </Typography>
               <Box display="flex" flexDirection="column" gap={2}>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={4}
-                  label="Description (Doctor's View)"
-                  value={formData.doctorDescription || ""}
-                  onChange={(e) =>
-                    handleBasicFieldChange("doctorDescription", e.target.value)
-                  }
-                  placeholder="Enter the case description from doctor's perspective..."
-                />
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={4}
-                  label="Scenario (Doctor's View)"
-                  value={formData.doctorScenario || ""}
-                  onChange={(e) =>
-                    handleBasicFieldChange("doctorScenario", e.target.value)
-                  }
-                  placeholder="Enter the scenario details from doctor's perspective..."
-                />
                 <Typography variant="subtitle2" gutterBottom>
                   Doctor's Sections
                 </Typography>
@@ -776,28 +723,6 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
                 Patient/Observer's View
               </Typography>
               <Box display="flex" flexDirection="column" gap={2}>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={4}
-                  label="Description (Patient's View)"
-                  value={formData.patientDescription || ""}
-                  onChange={(e) =>
-                    handleBasicFieldChange("patientDescription", e.target.value)
-                  }
-                  placeholder="Enter the case description from patient's perspective..."
-                />
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={4}
-                  label="Scenario (Patient's View)"
-                  value={formData.patientScenario || ""}
-                  onChange={(e) =>
-                    handleBasicFieldChange("patientScenario", e.target.value)
-                  }
-                  placeholder="Enter the scenario details from patient's perspective..."
-                />
                 <Typography variant="subtitle2" gutterBottom>
                   Patient's Sections
                 </Typography>
@@ -882,61 +807,6 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
                     </CardContent>
                   </Card>
                 ))}
-              </Box>
-            </CardContent>
-          </Card>
-
-          {/* Common Information */}
-          <Card sx={{ mb: 4 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Common Information
-              </Typography>
-              <Box display="flex" flexDirection="column" gap={2}>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={3}
-                  label="Doctor Role"
-                  value={formData.doctorRole || ""}
-                  onChange={(e) =>
-                    handleBasicFieldChange("doctorRole", e.target.value)
-                  }
-                  placeholder="Describe the doctor's role in this case..."
-                />
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={3}
-                  label="Patient Role"
-                  value={formData.patientRole || ""}
-                  onChange={(e) =>
-                    handleBasicFieldChange("patientRole", e.target.value)
-                  }
-                  placeholder="Describe the patient's role in this case..."
-                />
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={3}
-                  label="Observer Notes"
-                  value={formData.observerNotes || ""}
-                  onChange={(e) =>
-                    handleBasicFieldChange("observerNotes", e.target.value)
-                  }
-                  placeholder="Add notes for observers..."
-                />
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={3}
-                  label="Learning Objectives"
-                  value={formData.learningObjectives || ""}
-                  onChange={(e) =>
-                    handleBasicFieldChange("learningObjectives", e.target.value)
-                  }
-                  placeholder="List the learning objectives for this case..."
-                />
               </Box>
             </CardContent>
           </Card>

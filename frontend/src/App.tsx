@@ -1,86 +1,64 @@
 import React from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
-import { Box } from "@mui/material";
-import { useSelector } from "react-redux";
-import { RootState } from "./store";
+import { Routes, Route } from "react-router-dom";
+
+// Components
 import Layout from "./components/common/Layout";
 import HomePage from "./components/common/HomePage";
-import PrivateRoute from "./components/auth/PrivateRoute";
-import AdminRoute from "./components/auth/AdminRoute";
 import Login from "./components/auth/Login";
 import Register from "./components/auth/Register";
+import ForgotPassword from "./components/auth/ForgotPassword";
+import ResetPassword from "./components/auth/ResetPassword";
+import Profile from "./components/auth/Profile";
+import PrivateRoute from "./components/auth/PrivateRoute";
+import AdminRoute from "./components/auth/AdminRoute";
 import Dashboard from "./components/dashboard/Dashboard";
-import SessionCreate from "./components/session/SessionCreateSimple";
+import SessionCreateSimple from "./components/session/SessionCreateSimple";
 import SessionJoin from "./components/session/SessionJoin";
-import RoleSelection from "./components/session/RoleSelection";
-import ConfigureSession from "./components/session/ConfigureSession";
 import SessionRoom from "./components/session/SessionRoom";
+import ConfigureSession from "./components/session/ConfigureSession";
+import RoleSelection from "./components/session/RoleSelection";
 import AdminPanel from "./components/admin/AdminPanel";
 
-const App: React.FC = () => {
-  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
-
+function App() {
   return (
-    <Box
-      sx={{
-        width: "100%",
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Layout>
       <Routes>
-        <Route path="/" element={<Layout />}>
-          {/* Public routes */}
-          <Route index element={<HomePage />} />
+        {/* Public routes */}
+        <Route path="/" element={<HomePage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+
+        {/* Protected routes */}
+        <Route element={<PrivateRoute />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/session/create" element={<SessionCreateSimple />} />
+          <Route path="/session/join" element={<SessionJoin />} />
           <Route
-            path="login"
-            element={
-              !isAuthenticated ? <Login /> : <Navigate to="/dashboard" />
-            }
+            path="/session/:sessionCode/configure"
+            element={<ConfigureSession />}
           />
           <Route
-            path="register"
-            element={
-              !isAuthenticated ? <Register /> : <Navigate to="/dashboard" />
-            }
+            path="/session/:sessionCode/role"
+            element={<RoleSelection />}
           />
-
-          {/* Protected routes */}
-          <Route element={<PrivateRoute />}>
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="session">
-              <Route path="create" element={<SessionCreate />} />
-              <Route path="join" element={<SessionJoin />} />
-              <Route
-                path=":sessionCode/select-role"
-                element={<RoleSelection />}
-              />
-              <Route
-                path=":sessionCode/configure"
-                element={<ConfigureSession />}
-              />
-              <Route path=":sessionCode/room" element={<SessionRoom />} />
-              <Route path=":sessionId" element={<SessionRoom />} />
-            </Route>
-          </Route>
-
-          {/* Admin routes */}
-          <Route
-            path="admin"
-            element={
-              <AdminRoute>
-                <AdminPanel />
-              </AdminRoute>
-            }
-          />
-
-          {/* Catch all */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/session/:sessionCode/room" element={<SessionRoom />} />
         </Route>
+
+        {/* Admin routes */}
+        <Route
+          element={
+            <AdminRoute>
+              <AdminPanel />
+            </AdminRoute>
+          }
+          path="/admin"
+        />
       </Routes>
-    </Box>
+    </Layout>
   );
-};
+}
 
 export default App;

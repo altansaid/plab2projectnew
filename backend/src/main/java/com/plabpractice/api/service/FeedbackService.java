@@ -21,27 +21,6 @@ public class FeedbackService {
     public Feedback createFeedback(Session session, User sender, User recipient, String comment,
             List<Feedback.FeedbackScore> criteriaScores) {
 
-        System.out.println("🔧 Creating feedback in service:");
-        System.out.println("   session: " + session.getId());
-        System.out.println("   sender: " + sender.getEmail());
-        System.out.println("   recipient: " + recipient.getEmail());
-        System.out.println("   comment: " + comment);
-        System.out.println("   criteriaScores size: " + (criteriaScores != null ? criteriaScores.size() : "null"));
-
-        if (criteriaScores != null) {
-            for (int i = 0; i < criteriaScores.size(); i++) {
-                Feedback.FeedbackScore score = criteriaScores.get(i);
-                System.out.println("   criteria[" + i + "]: " + score.getCriterionName() + " = " + score.getScore());
-                if (score.getSubScores() != null) {
-                    for (int j = 0; j < score.getSubScores().size(); j++) {
-                        Feedback.FeedbackSubScore subScore = score.getSubScores().get(j);
-                        System.out.println("     subCriteria[" + j + "]: " + subScore.getSubCriterionName() + " = "
-                                + subScore.getScore());
-                    }
-                }
-            }
-        }
-
         Feedback feedback = new Feedback();
         feedback.setSession(session);
         feedback.setSender(sender);
@@ -54,22 +33,16 @@ public class FeedbackService {
 
         // Calculate overall performance from criteria scores
         double overallPerformance = calculateOverallPerformance(criteriaScores);
-        System.out.println("📊 Calculated overallPerformance: " + overallPerformance);
         feedback.setOverallPerformance(overallPerformance);
 
         // Set legacy score field (rounded integer version of overallPerformance)
         int legacyScore = (int) Math.round(overallPerformance);
-        System.out.println("🔄 Setting legacy score: " + legacyScore);
         feedback.setScore(legacyScore);
 
-        System.out.println("💾 About to save feedback to database...");
         try {
             Feedback savedFeedback = feedbackRepository.save(feedback);
-            System.out.println("✅ Feedback saved successfully with ID: " + savedFeedback.getId());
             return savedFeedback;
         } catch (Exception e) {
-            System.out.println("❌ Database save failed: " + e.getMessage());
-            e.printStackTrace();
             throw e;
         }
     }

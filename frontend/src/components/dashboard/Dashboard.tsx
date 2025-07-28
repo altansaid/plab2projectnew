@@ -135,7 +135,6 @@ const Dashboard: React.FC = () => {
       setFeedback(feedbackResponse.data);
       setActiveSessions(activeSessionsResponse.data);
     } catch (error) {
-      console.error("Failed to fetch dashboard data:", error);
     } finally {
       if (showLoader) setIsRefreshing(false);
     }

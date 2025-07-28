@@ -10,19 +10,7 @@ import React, {
 import { useTheme } from "@mui/material/styles";
 import { alpha } from "@mui/material/styles";
 
-// Logger utility for development
-const logger = {
-  log: (...args: any[]) => {
-    if (import.meta.env.DEV) {
-      console.log(...args);
-    }
-  },
-  error: (...args: any[]) => {
-    if (import.meta.env.DEV) {
-      console.error(...args);
-    }
-  },
-};
+// Logger utility for development - removed for production
 
 /*
  * 🔧 PERSISTENT FEEDBACK STATE SOLUTION
@@ -61,6 +49,7 @@ import {
   Button,
   Card,
   CardContent,
+  CircularProgress,
   Container,
   Typography,
   Grid,
@@ -103,6 +92,8 @@ import {
   submitFeedback,
   completeSession,
   requestNewCase,
+  selectNewTopic,
+  endSession,
   getObserverFeedbackStatus,
 } from "../../services/api";
 
@@ -130,8 +121,6 @@ interface SessionData {
     title: string;
     description: string;
     // Doctor role specific content
-    doctorDescription?: string;
-    doctorScenario?: string;
     doctorSections?: Array<{
       id: string;
       title: string;
@@ -139,8 +128,6 @@ interface SessionData {
       order: number;
     }>;
     // Patient/Observer role specific content
-    patientDescription?: string;
-    patientScenario?: string;
     patientSections?: Array<{
       id: string;
       title: string;
@@ -148,11 +135,8 @@ interface SessionData {
       order: number;
     }>;
     // Common fields
-    doctorRole?: string;
-    patientRole?: string;
     doctorNotes?: string;
     patientNotes?: string;
-    observerNotes?: string;
     imageUrl?: string;
     visualData?: {
       type: "image" | "text";
@@ -208,12 +192,6 @@ const useClientTimer = () => {
   // Start client-side timer with given parameters
   const startClientTimer = useCallback(
     (durationSeconds: number, startTimestamp: number, phase: string) => {
-      logger.log("Starting client-side timer:", {
-        durationSeconds,
-        startTimestamp,
-        phase,
-      });
-
       setTimerState({
         isActive: true,
         startTimestamp,
@@ -234,7 +212,6 @@ const useClientTimer = () => {
         const remaining = Math.max(0, durationSeconds - elapsed);
 
         if (remaining <= 0) {
-          logger.log("Client-side timer expired for phase:", phase);
           setTimerState((prev) => ({ ...prev, isActive: false }));
           if (intervalRef.current) {
             clearInterval(intervalRef.current);
@@ -250,8 +227,6 @@ const useClientTimer = () => {
 
   // Stop client-side timer
   const stopClientTimer = useCallback(() => {
-    logger.log("Stopping client-side timer");
-
     setTimerState((prev) => ({
       ...prev,
       isActive: false,
@@ -416,20 +391,8 @@ const StableFeedbackComponent = ({
 }) => {
   // Debug logging to track component stability
   useEffect(() => {
-    logger.log("🔄 StableFeedbackComponent: Phase changed to", phase);
-    logger.log(
-      "🔒 Component rendered with stable props - no focus loss expected"
-    );
+    // Component stability tracking
   }, [phase]);
-
-  // Debug: Log when feedbackState changes
-  useEffect(() => {
-    console.log("📊 StableFeedbackComponent: feedbackState updated", {
-      criteriaScoresLength: feedbackState.criteriaScores.length,
-      criteriaScores: feedbackState.criteriaScores,
-      additionalComments: feedbackState.additionalComments,
-    });
-  }, [feedbackState]);
 
   // Note: createCriteriaHandler removed - using direct onFieldChange calls with rating buttons
 
@@ -502,7 +465,6 @@ const StableFeedbackComponent = ({
     const theme = useTheme();
 
     // Debug: Log the current value prop
-    console.log(`🎯 RatingButtons for "${label}": value =`, value);
 
     return (
       <Box sx={{ mb: 2 }}>
@@ -513,18 +475,10 @@ const StableFeedbackComponent = ({
           value={value}
           exclusive
           onChange={(_, newValue) => {
-            console.log(
-              `🎯 ToggleButtonGroup onChange called for "${label}": newValue =`,
-              newValue,
-              "current value =",
-              value
-            );
             // Prevent deselection - only allow changes to valid ratings
             if (newValue !== null) {
-              console.log(`✅ Calling onChange with value:`, newValue);
               onChange(newValue);
             } else {
-              console.log(`❌ Ignoring null value (deselection attempt)`);
             }
           }}
           disabled={disabled}
@@ -653,9 +607,6 @@ const StableFeedbackComponent = ({
                 Overall Performance: {calculateOverallPerformance().toFixed(1)}/
                 {calculateMaxPossibleScore()}
               </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Sum of all main criteria scores (each rated 0-4)
-              </Typography>
             </Box>
           )}
 
@@ -668,35 +619,6 @@ const StableFeedbackComponent = ({
               .map((criterion) => {
                 const criteriaScore = feedbackState.criteriaScores.find(
                   (score) => score.criterionId === criterion.id
-                );
-
-                // Debug: Log the criteria score lookup
-                console.log(
-                  `🔍 Criterion "${criterion.name}" (${criterion.id}):`,
-                  {
-                    criteriaScore,
-                    currentScore: criteriaScore?.score,
-                    feedbackStateLength: feedbackState.criteriaScores.length,
-                  }
-                );
-
-                // Debug: Log all available criterion IDs for comparison
-                console.log(
-                  `🆔 Available criterion IDs in feedbackState:`,
-                  feedbackState.criteriaScores.map((score) => ({
-                    id: score.criterionId,
-                    name: score.criterionName,
-                  }))
-                );
-                console.log(
-                  `🎯 Looking for criterion ID: "${
-                    criterion.id
-                  }" (type: ${typeof criterion.id})`
-                );
-                console.log(
-                  `📋 All feedback criteria IDs: [${feedbackState.criteriaScores
-                    .map((s) => `"${s.criterionId}"`)
-                    .join(", ")}]`
                 );
 
                 return (
@@ -775,21 +697,6 @@ const StableFeedbackComponent = ({
                               disabled={false}
                               label="Rating"
                             />
-                            <Box
-                              sx={{
-                                mt: 1,
-                                p: 1,
-                                bgcolor: "#e8f5e8",
-                                borderRadius: 1,
-                              }}
-                            >
-                              <Typography
-                                variant="caption"
-                                color="textSecondary"
-                              >
-                                ⭐ Direct 0-4 rating scale
-                              </Typography>
-                            </Box>
                           </Box>
                         )}
                       </CardContent>
@@ -883,17 +790,6 @@ const StableFeedbackComponent = ({
             )}
           </Box>
         )}
-
-        {/* Status message during consultation */}
-        {isConsultationPhase && (
-          <Box sx={{ mt: 3, textAlign: "center" }}>
-            <Typography variant="body2" color="text.secondary">
-              Rate criteria in real-time during the consultation. Your ratings
-              are automatically saved. Submit button will appear when
-              consultation ends.
-            </Typography>
-          </Box>
-        )}
       </CardContent>
     </Card>
   );
@@ -907,8 +803,6 @@ interface PatientInformationCardProps {
     title: string;
     description: string;
     // Doctor role specific content
-    doctorDescription?: string;
-    doctorScenario?: string;
     doctorSections?: Array<{
       id: string;
       title: string;
@@ -916,8 +810,6 @@ interface PatientInformationCardProps {
       order: number;
     }>;
     // Patient/Observer role specific content
-    patientDescription?: string;
-    patientScenario?: string;
     patientSections?: Array<{
       id: string;
       title: string;
@@ -925,11 +817,8 @@ interface PatientInformationCardProps {
       order: number;
     }>;
     // Common fields
-    doctorRole?: string;
-    patientRole?: string;
     doctorNotes?: string;
     patientNotes?: string;
-    observerNotes?: string;
     imageUrl?: string;
     visualData?: {
       type: "image" | "text";
@@ -954,14 +843,6 @@ const PatientInformationCard: React.FC<PatientInformationCardProps> = ({
   if (!selectedCase) return null;
 
   // Get role-specific content
-  const description =
-    userRole.toLowerCase() === "doctor"
-      ? selectedCase.doctorDescription
-      : selectedCase.patientDescription;
-  const scenario =
-    userRole.toLowerCase() === "doctor"
-      ? selectedCase.doctorScenario
-      : selectedCase.patientScenario;
   const sections =
     userRole.toLowerCase() === "doctor"
       ? selectedCase.doctorSections
@@ -971,7 +852,7 @@ const PatientInformationCard: React.FC<PatientInformationCardProps> = ({
       ? selectedCase.doctorNotes
       : userRole.toLowerCase() === "patient"
       ? selectedCase.patientNotes
-      : selectedCase.observerNotes;
+      : "";
 
   return (
     <Card>
@@ -982,38 +863,15 @@ const PatientInformationCard: React.FC<PatientInformationCardProps> = ({
               {selectedCase.title}
             </Typography>
           )}
-          <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
-            <Chip
-              label={selectedCase.category.name}
-              size="small"
-              color="primary"
-              variant="outlined"
-            />
-          </Box>
-
-          <Divider />
 
           <Box>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Description
-            </Typography>
-            <Typography variant="body2">
-              {description || selectedCase.description}
-            </Typography>
+            <Typography
+              variant="subtitle2"
+              color="text.secondary"
+              gutterBottom
+            ></Typography>
+            <Typography variant="body2">{selectedCase.description}</Typography>
           </Box>
-
-          {scenario && (
-            <Box sx={{ mt: 2 }}>
-              <Typography
-                variant="subtitle2"
-                color="text.secondary"
-                gutterBottom
-              >
-                Scenario
-              </Typography>
-              <Typography variant="body2">{scenario}</Typography>
-            </Box>
-          )}
 
           {roleSpecificNotes && (
             <Box sx={{ mt: 2 }}>
@@ -1034,9 +892,7 @@ const PatientInformationCard: React.FC<PatientInformationCardProps> = ({
                 variant="subtitle2"
                 color="text.secondary"
                 gutterBottom
-              >
-                Additional Information
-              </Typography>
+              ></Typography>
               {sections
                 .sort((a, b) => a.order - b.order)
                 .map((section) => (
@@ -1108,8 +964,6 @@ interface ConsultationViewProps {
     title: string;
     description: string;
     // Doctor role specific content
-    doctorDescription?: string;
-    doctorScenario?: string;
     doctorSections?: Array<{
       id: string;
       title: string;
@@ -1117,8 +971,6 @@ interface ConsultationViewProps {
       order: number;
     }>;
     // Patient/Observer role specific content
-    patientDescription?: string;
-    patientScenario?: string;
     patientSections?: Array<{
       id: string;
       title: string;
@@ -1126,11 +978,8 @@ interface ConsultationViewProps {
       order: number;
     }>;
     // Common fields
-    doctorRole?: string;
-    patientRole?: string;
     doctorNotes?: string;
     patientNotes?: string;
-    observerNotes?: string;
     imageUrl?: string;
     visualData?: {
       type: "image" | "text";
@@ -1191,66 +1040,43 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({
           </Card>
 
           {/* Session Controls */}
-          <Card sx={{ mt: 2 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Session Controls
-              </Typography>
-              {(selectedCase?.visualData?.content ||
-                selectedCase?.imageUrl) && (
-                <Button
-                  variant="outlined"
-                  fullWidth
-                  startIcon={<ImageIcon />}
-                  onClick={() => setShowContentModal(true)}
-                  sx={{ py: 1.5, mb: 1 }}
-                >
-                  View Patient Content
-                </Button>
-              )}
-              {userRole === "doctor" && (
-                <Button
-                  variant="contained"
-                  fullWidth
-                  startIcon={<FeedbackIcon />}
-                  onClick={onGiveFeedback}
-                  disabled={buttonStates.giveFeedback}
-                  sx={{ py: 1.5 }}
-                >
-                  {buttonStates.giveFeedback ? "Ending..." : "End Consultation"}
-                </Button>
-              )}
-              {userRole === "observer" && (
-                <Button
-                  variant="contained"
-                  fullWidth
-                  startIcon={<FeedbackIcon />}
-                  onClick={onGiveFeedback}
-                  disabled={buttonStates.giveFeedback}
-                  sx={{ py: 1.5 }}
-                >
-                  {buttonStates.giveFeedback ? "Loading..." : "Give Feedback"}
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Role Information */}
-          <Card sx={{ mt: 2 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Your Role
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {userRole === "doctor" &&
-                  "Lead the consultation, manage timing, and provide feedback."}
-                {userRole === "patient" &&
-                  "You will role-play as the patient during the consultation. Follow the scenario and respond naturally."}
-                {userRole === "observer" &&
-                  "Observe the consultation and provide feedback on the doctor's performance."}
-              </Typography>
-            </CardContent>
-          </Card>
+          {(userRole === "doctor" ||
+            selectedCase?.visualData?.content ||
+            selectedCase?.imageUrl) && (
+            <Card sx={{ mt: 2 }}>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Session Controls
+                </Typography>
+                {(selectedCase?.visualData?.content ||
+                  selectedCase?.imageUrl) && (
+                  <Button
+                    variant="outlined"
+                    fullWidth
+                    startIcon={<ImageIcon />}
+                    onClick={() => setShowContentModal(true)}
+                    sx={{ py: 1.5, mb: 1 }}
+                  >
+                    View Patient Content
+                  </Button>
+                )}
+                {userRole === "doctor" && (
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    startIcon={<FeedbackIcon />}
+                    onClick={onGiveFeedback}
+                    disabled={buttonStates.giveFeedback}
+                    sx={{ py: 1.5 }}
+                  >
+                    {buttonStates.giveFeedback
+                      ? "Ending..."
+                      : "End Consultation"}
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </Grid>
       </Grid>
     </Container>
@@ -1282,6 +1108,10 @@ const SessionRoomMain: React.FC = () => {
   const [imageError, setImageError] = useState(false);
   const [showObserverWarningDialog, setShowObserverWarningDialog] =
     useState(false);
+  const [showTopicSelectionDialog, setShowTopicSelectionDialog] =
+    useState(false);
+  const [availableTopics, setAvailableTopics] = useState<string[]>([]);
+  const [completedTopic, setCompletedTopic] = useState<string>("");
   const [pendingSubmissionAction, setPendingSubmissionAction] = useState<
     "newCase" | "roleChange" | null
   >(null);
@@ -1304,11 +1134,6 @@ const SessionRoomMain: React.FC = () => {
       sessionData?.currentRound &&
       sessionData.currentRound !== currentRound
     ) {
-      logger.log("🔄 New round detected, resetting feedback state", {
-        oldRound: currentRound,
-        newRound: sessionData.currentRound,
-      });
-
       // Reset feedback state for new round
       setPersistentFeedbackState({
         criteriaScores: [],
@@ -1323,15 +1148,6 @@ const SessionRoomMain: React.FC = () => {
 
   // Initialize feedback criteria scores when session data loads
   useEffect(() => {
-    console.log("🔄 Feedback initialization useEffect triggered:", {
-      hasSelectedCase: !!sessionData?.selectedCase?.feedbackCriteria,
-      criteriaLength: sessionData?.selectedCase?.feedbackCriteria?.length || 0,
-      currentStateLength: persistentFeedbackState.criteriaScores.length,
-      shouldInitialize:
-        sessionData?.selectedCase?.feedbackCriteria &&
-        persistentFeedbackState.criteriaScores.length === 0,
-    });
-
     // Always reinitialize if the criteria IDs don't match what we have in state
     const currentCriteriaIds =
       sessionData?.selectedCase?.feedbackCriteria?.map((c) => c.id) || [];
@@ -1342,13 +1158,6 @@ const SessionRoomMain: React.FC = () => {
       currentCriteriaIds.length > 0 &&
       currentCriteriaIds.length === stateCriteriaIds.length &&
       currentCriteriaIds.every((id) => stateCriteriaIds.includes(id));
-
-    console.log("🔍 ID comparison:", {
-      currentCriteriaIds,
-      stateCriteriaIds,
-      idsMatch,
-      shouldReinitialize: !idsMatch,
-    });
 
     if (
       sessionData?.selectedCase?.feedbackCriteria &&
@@ -1366,16 +1175,6 @@ const SessionRoomMain: React.FC = () => {
           })),
         }));
 
-      console.log("🚀 Initializing feedback criteria scores:", {
-        criteriaFromCase: sessionData.selectedCase.feedbackCriteria.map(
-          (c) => ({ id: c.id, name: c.name })
-        ),
-        initialScores: initialScores.map((s) => ({
-          id: s.criterionId,
-          name: s.criterionName,
-        })),
-      });
-
       setPersistentFeedbackState((prev) => ({
         ...prev,
         criteriaScores: initialScores,
@@ -1389,17 +1188,6 @@ const SessionRoomMain: React.FC = () => {
   // SINGLE MEMOIZED HANDLER - prevents focus loss by providing stable reference
   const handleFieldChange = useCallback(
     (fieldName: string, value: string | number, subFieldId?: string) => {
-      logger.log(
-        `📝 Field changed: ${fieldName} = ${value}`,
-        subFieldId ? `(sub: ${subFieldId})` : ""
-      );
-
-      console.log(`🔧 handleFieldChange called with:`, {
-        fieldName,
-        value,
-        subFieldId,
-      });
-
       if (fieldName === "additionalComments") {
         setPersistentFeedbackState((prev) => ({
           ...prev,
@@ -1455,11 +1243,9 @@ const SessionRoomMain: React.FC = () => {
       );
 
       if (!isComplete) {
-        logger.log("❌ Cannot submit: Not all criteria have scores");
         return;
       }
 
-      logger.log("🚀 Submitting feedback with stable handler...");
       setPersistentIsSubmitting(true);
 
       try {
@@ -1480,18 +1266,14 @@ const SessionRoomMain: React.FC = () => {
           requestNewCase: startNewCase, // Add flag to indicate new case request
         };
 
-        logger.log("📤 Feedback data being submitted:", feedbackData);
         await submitFeedback(sessionCode!, feedbackData);
 
         setPersistentHasSubmitted(true);
-        logger.log("✅ Feedback submitted successfully");
 
         // Handle the flow based on startNewCase flag
         if (startNewCase) {
           // Stay in session to see the new case (for all roles)
-          logger.log(
-            "User submitted feedback with new case request - staying in session"
-          );
+
           return;
         }
 
@@ -1501,7 +1283,7 @@ const SessionRoomMain: React.FC = () => {
           navigate("/dashboard");
         }, 500);
       } catch (error) {
-        logger.error("❌ Failed to submit feedback:", error);
+        // Handle feedback submission error
       } finally {
         setPersistentIsSubmitting(false);
       }
@@ -1533,11 +1315,9 @@ const SessionRoomMain: React.FC = () => {
     );
 
     if (!isComplete) {
-      logger.log("❌ Cannot submit: Not all criteria have scores");
       return;
     }
 
-    logger.log("🚀 Submitting feedback with role change...");
     setPersistentIsSubmitting(true);
 
     try {
@@ -1559,21 +1339,13 @@ const SessionRoomMain: React.FC = () => {
         requestRoleChange: true, // New flag to indicate role change request
       };
 
-      logger.log(
-        "📤 Feedback data being submitted with role change:",
-        feedbackData
-      );
       await submitFeedback(sessionCode!, feedbackData);
 
       setPersistentHasSubmitted(true);
-      logger.log("✅ Feedback submitted successfully with role change");
 
       // Stay in session to see the new case with swapped roles
-      logger.log(
-        "User submitted feedback with role change request - staying in session"
-      );
     } catch (error) {
-      logger.error("❌ Failed to submit feedback with role change:", error);
+      // Handle feedback submission error
     } finally {
       setPersistentIsSubmitting(false);
     }
@@ -1593,7 +1365,6 @@ const SessionRoomMain: React.FC = () => {
       const response = await getObserverFeedbackStatus(sessionCode);
       return response.data;
     } catch (error) {
-      logger.error("❌ Failed to check observer feedback status:", error);
       // Return default safe values to not block submission
       return { hasObserver: false, observerHasGivenFeedback: true };
     }
@@ -1646,21 +1417,43 @@ const SessionRoomMain: React.FC = () => {
     // Do nothing - just close dialog and wait
   }, []);
 
+  const handleTopicSelection = useCallback(
+    async (selectedTopic: string) => {
+      if (!sessionData) return;
+
+      try {
+        await selectNewTopic(sessionData.sessionCode, selectedTopic);
+        setShowTopicSelectionDialog(false);
+      } catch (error: any) {
+        setError(error.response?.data?.error || "Failed to select topic");
+      }
+    },
+    [sessionData]
+  );
+
+  const handleSessionEnd = useCallback(async () => {
+    if (!sessionData) return;
+
+    try {
+      await endSession(sessionData.sessionCode);
+      setShowTopicSelectionDialog(false);
+
+      // Navigate to dashboard after session is properly ended
+      disconnectWebSocket();
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 500);
+    } catch (error: any) {
+      setError(error.response?.data?.error || "Failed to end session");
+    }
+  }, [sessionData, navigate]);
+
   // Note: stableFeedbackProps will be defined after handleCompleteSession
 
   // Debug: Track feedback state preservation (reduced logging to prevent spam)
   useEffect(() => {
     if (sessionData?.phase) {
-      logger.log("🔄 Main component: Phase changed to", sessionData.phase);
-      logger.log(
-        "💾 Persistent feedback state preserved:",
-        persistentFeedbackState.criteriaScores.length > 0 ||
-          persistentFeedbackState.additionalComments.length > 0
-      );
-      logger.log(
-        "📊 Criteria scores count:",
-        persistentFeedbackState.criteriaScores.length
-      );
+      // Phase change tracking
     }
   }, [sessionData?.phase, persistentFeedbackState]);
 
@@ -1696,14 +1489,11 @@ const SessionRoomMain: React.FC = () => {
     setButtonStates((prev) => ({ ...prev, startSession: true }));
 
     try {
-      logger.log("Starting session:", sessionCode);
       await startSession(sessionCode);
-      logger.log("Session started successfully");
 
       // WebSocket will handle the session updates automatically
       // No need for polling since we have real-time updates
     } catch (error: any) {
-      logger.error("Failed to start session:", error);
       setError(
         error.response?.data?.error ||
           error.message ||
@@ -1718,11 +1508,8 @@ const SessionRoomMain: React.FC = () => {
   const handleSkipToConsultation = useCallback(async () => {
     if (!sessionCode || !sessionData) return;
     try {
-      logger.log("Skipping to consultation phase:", sessionCode);
       await skipPhase(sessionCode);
-      logger.log("Phase skipped successfully");
     } catch (error: any) {
-      logger.error("Failed to skip phase:", error);
       setError(
         error.response?.data?.error ||
           error.message ||
@@ -1738,14 +1525,11 @@ const SessionRoomMain: React.FC = () => {
     setButtonStates((prev) => ({ ...prev, newCase: true }));
 
     try {
-      logger.log("Requesting new case for session:", sessionData.sessionCode);
       await requestNewCase(sessionData.sessionCode);
-      logger.log("New case requested successfully");
 
       // The WebSocket handler will update the session data with the new case
       // and trigger the phase change automatically
     } catch (error: any) {
-      logger.error("Failed to request new case:", error);
       setError(
         error.response?.data?.error || error.message || "Failed to get new case"
       );
@@ -1762,9 +1546,9 @@ const SessionRoomMain: React.FC = () => {
     setButtonStates((prev) => ({ ...prev, giveFeedback: true }));
 
     try {
-      logger.log("Doctor ending consultation and moving to feedback phase");
+      console.log("Doctor ending consultation and moving to feedback phase");
       await skipPhase(sessionData.sessionCode);
-      logger.log("Successfully transitioned to feedback phase");
+      console.log("Successfully transitioned to feedback phase");
 
       // Stop the consultation timer
       clientTimer.stopClientTimer();
@@ -1781,7 +1565,7 @@ const SessionRoomMain: React.FC = () => {
         };
       });
     } catch (error) {
-      logger.error("Failed to transition to feedback phase:", error);
+      console.error("Failed to transition to feedback phase:", error);
       setError("Failed to transition to feedback phase. Please try again.");
     } finally {
       // Reset button loading state
@@ -1791,7 +1575,6 @@ const SessionRoomMain: React.FC = () => {
 
   const handleSubmitFeedback = useCallback(async () => {
     // This is a placeholder - the actual feedback submission is handled by IndependentFeedbackComponent
-    logger.log("Submit feedback called from main component");
   }, []);
 
   // STABLE PROPS OBJECT - memoized to prevent unnecessary re-renders
@@ -1832,7 +1615,6 @@ const SessionRoomMain: React.FC = () => {
         if (sessionData?.phase === "feedback") {
           // Feedback phase'de individual completion yap
           await completeSession(sessionCode);
-          logger.log("Individual session completed via exit");
         } else {
           // Diğer phase'lerde normal leave session
           await leaveSession(sessionCode);
@@ -1840,7 +1622,7 @@ const SessionRoomMain: React.FC = () => {
       }
       disconnectWebSocket();
     } catch (error) {
-      logger.error("Error exiting session:", error);
+      // Handle exit error silently
     }
     navigate("/dashboard");
   }, [sessionCode, sessionData?.phase, navigate]);
@@ -1868,13 +1650,10 @@ const SessionRoomMain: React.FC = () => {
         const response = await getSessionByCode(sessionCode);
         const session = response.data;
 
-        logger.log("Session data received:", session);
-
         // Update user role from backend if available
         if (session.userRole) {
           const backendRole = session.userRole.toLowerCase() as SessionRole;
           if (backendRole !== userRole) {
-            logger.log("Updating user role from backend:", backendRole);
             setUserRole(backendRole);
           }
         }
@@ -1908,21 +1687,19 @@ const SessionRoomMain: React.FC = () => {
               ? session.readingTime * 60
               : session.consultationTime * 60;
 
-          // Use backend's timeRemaining if available, otherwise use full duration
-          const remainingSeconds =
-            session.timeRemaining || totalDurationSeconds;
+          // Use the original shared timestamp if available, otherwise reconstruct it
+          let startTimestamp: number;
 
-          // Calculate start timestamp based on elapsed time
-          const elapsedSeconds = totalDurationSeconds - remainingSeconds;
-          const startTimestamp = Date.now() - elapsedSeconds * 1000;
-
-          logger.log("Resume timer:", {
-            phase: initialSessionData.phase,
-            totalDurationSeconds,
-            remainingSeconds,
-            elapsedSeconds,
-            startTimestamp,
-          });
+          if (session.timerStartTimestamp) {
+            // Perfect sync: Use the original shared timestamp from backend
+            startTimestamp = session.timerStartTimestamp;
+          } else {
+            // Fallback: Reconstruct timestamp (should only happen for legacy sessions)
+            const remainingSeconds =
+              session.timeRemaining || totalDurationSeconds;
+            const elapsedSeconds = totalDurationSeconds - remainingSeconds;
+            startTimestamp = Date.now() - elapsedSeconds * 1000;
+          }
 
           clientTimer.startClientTimer(
             totalDurationSeconds,
@@ -1932,11 +1709,20 @@ const SessionRoomMain: React.FC = () => {
         }
 
         // Set up WebSocket connection with error handling
-        logger.log("Setting up WebSocket for session:", sessionCode);
         try {
           connectWebSocket(sessionCode, {
             onSessionUpdate: (data) => {
-              logger.log("Session update received:", data);
+              // Close topic selection dialog when session continues with new topic
+              // Always close if new case detected (don't rely on stale state value)
+              if (data.selectedCase) {
+                setShowTopicSelectionDialog(false);
+              }
+
+              // Also close dialog when phase changes back to READING (new case started)
+              if (data.phase === "READING" && data.selectedCase) {
+                setShowTopicSelectionDialog(false);
+              }
+
               setSessionData((prev) => {
                 if (!prev) return null;
 
@@ -1959,9 +1745,6 @@ const SessionRoomMain: React.FC = () => {
                     const oldRole = prevUserParticipant.role;
 
                     if (newRole !== oldRole) {
-                      logger.log(
-                        `🔄 User role changed from ${oldRole} to ${newRole}`
-                      );
                       setUserRole(newRole);
                     }
                   }
@@ -1979,13 +1762,16 @@ const SessionRoomMain: React.FC = () => {
               });
             },
             onParticipantUpdate: (participants) => {
-              logger.log("Participant update received:", participants);
               setSessionData((prev) =>
                 prev ? { ...prev, participants } : null
               );
             },
             onPhaseChange: (data) => {
-              logger.log("Phase change received:", data);
+              // Close topic selection dialog when phase changes to reading (new case started)
+              // Always close if phase is READING (don't rely on stale state value)
+              if (data.phase === "READING") {
+                setShowTopicSelectionDialog(false);
+              }
 
               // Force a re-render by creating a new object
               setSessionData((prev) => {
@@ -2011,14 +1797,6 @@ const SessionRoomMain: React.FC = () => {
 
               // Start timer if duration is provided
               if (data.durationSeconds && data.durationSeconds > 0) {
-                logger.log(
-                  "Starting client-side timer for phase:",
-                  data.phase,
-                  "duration:",
-                  data.durationSeconds,
-                  "startTimestamp:",
-                  data.startTimestamp
-                );
                 clientTimer.startClientTimer(
                   data.durationSeconds,
                   data.startTimestamp || Date.now(),
@@ -2027,7 +1805,6 @@ const SessionRoomMain: React.FC = () => {
               }
             },
             onTimerStart: (data) => {
-              logger.log("Timer start received:", data);
               if (data.durationSeconds && data.startTimestamp) {
                 clientTimer.startClientTimer(
                   data.durationSeconds,
@@ -2037,26 +1814,56 @@ const SessionRoomMain: React.FC = () => {
               }
             },
             onSessionEnded: (data) => {
-              logger.log("Session ended message received:", data);
               clientTimer.stopClientTimer();
               handleSessionEnded(data.reason || "Session has ended");
             },
             onRoleChange: (data) => {
-              logger.log("Role change notification received:", data);
               // Role change detection is now handled in onSessionUpdate
               // This handler just logs the notification message
             },
+            onTopicSelectionNeeded: (data) => {
+              setCompletedTopic(data.completedTopic || "");
+              setAvailableTopics(data.availableTopics || []);
+              setShowTopicSelectionDialog(true);
+            },
           });
         } catch (wsError) {
-          logger.error(
-            "Failed to setup WebSocket, continuing without real-time updates:",
-            wsError
-          );
           // Continue without WebSocket - session will still work with manual refresh
         }
       } catch (error) {
-        logger.error("Failed to load session:", error);
-        setError("Failed to load session data");
+        // Check if it's an API response error
+        if (error && typeof error === "object" && "response" in error) {
+          const apiError = error as any;
+
+          // Provide specific error messages based on status code
+          if (apiError.response?.status === 404) {
+            setError(
+              `Session not found. Please verify the session code: ${sessionCode}`
+            );
+          } else if (apiError.response?.status === 401) {
+            setError("Authentication failed. Please log in again.");
+          } else if (apiError.response?.status === 403) {
+            setError(
+              "Access denied. You don't have permission to access this session."
+            );
+          } else if (apiError.response?.status >= 500) {
+            setError(
+              "Server error. Please try again later or contact support."
+            );
+          } else {
+            setError(
+              `Failed to load session data: ${
+                apiError.response?.data?.error ||
+                apiError.message ||
+                "Unknown error"
+              }`
+            );
+          }
+        } else {
+          setError(
+            "Network error. Please check your connection and try again."
+          );
+        }
       } finally {
         setLoading(false);
       }
@@ -2068,7 +1875,7 @@ const SessionRoomMain: React.FC = () => {
       try {
         disconnectWebSocket();
       } catch (error) {
-        logger.error("Error during WebSocket cleanup:", error);
+        // Handle cleanup error silently
       }
     };
   }, [sessionCode, handleSessionEnded]); // Removed clientTimer dependency to prevent infinite loops
@@ -2125,9 +1932,7 @@ const SessionRoomMain: React.FC = () => {
         "Patient presenting with medical condition",
       otherInformation:
         caseData.doctorNotes || "No additional background information provided",
-      whatYouMustDo:
-        caseData.doctorRole ||
-        "Assess the patient and discuss management with them",
+      whatYouMustDo: "Assess the patient and discuss management with them",
     };
   };
 
@@ -2215,38 +2020,6 @@ const SessionRoomMain: React.FC = () => {
                 </CardContent>
               </Card>
             </Grid>
-
-            <Grid item xs={12} md={4}>
-              <Card>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    Session Information
-                  </Typography>
-                  <Box
-                    sx={{ display: "flex", flexDirection: "column", gap: 1 }}
-                  >
-                    <Typography variant="body2">
-                      <strong>Session Code:</strong> {sessionData?.sessionCode}
-                    </Typography>
-                    <Typography variant="body2">
-                      <strong>Your Role:</strong>{" "}
-                      {userRole?.charAt(0).toUpperCase() + userRole?.slice(1)}
-                    </Typography>
-                    <Typography variant="body2">
-                      <strong>Status:</strong> {isHost ? "Host" : "Participant"}
-                    </Typography>
-                  </Box>
-
-                  <Divider sx={{ my: 2 }} />
-
-                  <Typography variant="body2" color="text.secondary">
-                    {isHost
-                      ? "You can start the session once all expected participants have joined."
-                      : "The session will begin automatically when the host starts it."}
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
           </Grid>
         </Container>
       );
@@ -2272,6 +2045,17 @@ const SessionRoomMain: React.FC = () => {
 
         <Grid item xs={12} md={4}>
           <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Reading Phase
+              </Typography>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                Review the patient information and prepare for the consultation
+              </Typography>
+            </CardContent>
+          </Card>
+
+          <Card sx={{ mt: 2 }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
                 Session Controls
@@ -2311,28 +2095,7 @@ const SessionRoomMain: React.FC = () => {
                 >
                   {buttonStates.newCase ? "Loading..." : "New Case"}
                 </Button>
-                <Button
-                  variant="outlined"
-                  fullWidth
-                  startIcon={<FeedbackIcon />}
-                  onClick={handleGiveFeedback}
-                  disabled={buttonStates.giveFeedback}
-                  sx={{ py: 1.5 }}
-                >
-                  {buttonStates.giveFeedback ? "Loading..." : "Give Feedback"}
-                </Button>
               </Box>
-            </CardContent>
-          </Card>
-
-          <Card sx={{ mt: 2 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Your Role
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Lead the consultation, manage timing, and provide feedback.
-              </Typography>
             </CardContent>
           </Card>
         </Grid>
@@ -2856,6 +2619,79 @@ const SessionRoomMain: React.FC = () => {
           >
             Continue Anyway
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Topic Selection Dialog */}
+      <Dialog
+        open={showTopicSelectionDialog}
+        onClose={() => {}} // Prevent closing by clicking outside
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>🎉 Topic Completed!</DialogTitle>
+        <DialogContent>
+          <Typography gutterBottom>
+            Congratulations! You have completed all cases in {completedTopic}.
+          </Typography>
+
+          {userRole === "doctor" ? (
+            // Doctor sees topic selection options
+            <>
+              <Typography gutterBottom>
+                {availableTopics.length > 0
+                  ? "Choose a new topic to continue practicing:"
+                  : "You have completed all available topics!"}
+              </Typography>
+
+              {availableTopics.length > 0 && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle1" gutterBottom>
+                    Available Topics:
+                  </Typography>
+                  <Box
+                    sx={{ display: "flex", flexDirection: "column", gap: 1 }}
+                  >
+                    {availableTopics.map((topic) => (
+                      <Button
+                        key={topic}
+                        variant="outlined"
+                        onClick={() => handleTopicSelection(topic)}
+                        sx={{ justifyContent: "flex-start" }}
+                      >
+                        {topic}
+                      </Button>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+            </>
+          ) : (
+            // Patient and Observer see waiting message
+            <Box sx={{ textAlign: "center", py: 2 }}>
+              <Typography gutterBottom>
+                Please wait while the doctor selects a new topic to continue the
+                session.
+              </Typography>
+              <Box sx={{ display: "flex", justifyContent: "center", mt: 2 }}>
+                <CircularProgress size={24} />
+                <Typography variant="body2" sx={{ ml: 2, alignSelf: "center" }}>
+                  Waiting for doctor's selection...
+                </Typography>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          {userRole === "doctor" && (
+            <Button
+              onClick={handleSessionEnd}
+              color="primary"
+              variant="contained"
+            >
+              {availableTopics.length > 0 ? "End Session" : "Back to Dashboard"}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
     </Box>

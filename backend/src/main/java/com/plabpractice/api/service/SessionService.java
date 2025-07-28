@@ -319,6 +319,32 @@ public class SessionService {
 
         if (selectedCase != null) {
             session.setSelectedCase(selectedCase);
+
+            // Track used case to prevent duplicates
+            if (session.getUsedCaseIds() == null) {
+                session.setUsedCaseIds(new ArrayList<>());
+            }
+            if (!session.getUsedCaseIds().contains(selectedCase.getId())) {
+                session.getUsedCaseIds().add(selectedCase.getId());
+            }
+        }
+
+        // Store recall date range if provided
+        if (config.containsKey("recallStartDate") && config.get("recallStartDate") != null) {
+            try {
+                session.setRecallStartDate(java.time.LocalDate.parse((String) config.get("recallStartDate")));
+            } catch (Exception e) {
+                // Log error but don't fail session creation
+                System.err.println("Failed to parse recallStartDate: " + e.getMessage());
+            }
+        }
+        if (config.containsKey("recallEndDate") && config.get("recallEndDate") != null) {
+            try {
+                session.setRecallEndDate(java.time.LocalDate.parse((String) config.get("recallEndDate")));
+            } catch (Exception e) {
+                // Log error but don't fail session creation
+                System.err.println("Failed to parse recallEndDate: " + e.getMessage());
+            }
         }
 
         // Keep session in WAITING phase after configuration
@@ -439,9 +465,6 @@ public class SessionService {
                 participant.get().setIsActive(false);
                 sessionParticipantRepository.save(participant.get());
                 leftSessions.add(session);
-                System.out.println("Auto-deactivated user " + user.getName() +
-                        " from session " + session.getCode() +
-                        " because they joined session " + currentSessionCode);
             }
         }
 
@@ -454,6 +477,7 @@ public class SessionService {
     public void startPhase(Session session, Session.Phase phase) {
         session.setPhase(phase);
         session.setPhaseStartTime(LocalDateTime.now());
+        session.setTimerStartTimestamp(null); // Clear any stale timer timestamp
 
         // Set initial time remaining based on phase
         int totalTimeSeconds = 0;

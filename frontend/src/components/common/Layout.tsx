@@ -1,6 +1,4 @@
-import React from "react";
-import { Outlet, useNavigate } from "react-router-dom";
-import { useSelector, useDispatch } from "react-redux";
+import React, { useState } from "react";
 import {
   AppBar,
   Box,
@@ -14,26 +12,31 @@ import {
   Avatar,
   Divider,
   ListItemIcon,
-  useTheme,
-  alpha,
 } from "@mui/material";
 import {
+  Menu as MenuIcon,
   AccountCircle,
+  Person,
+  Logout,
+  AdminPanelSettings,
   Dashboard as DashboardIcon,
-  AdminPanelSettings as AdminIcon,
-  Logout as LogoutIcon,
-  Login as LoginIcon,
-  PersonAdd as RegisterIcon,
 } from "@mui/icons-material";
+import { useSelector, useDispatch } from "react-redux";
+import { useNavigate, Link } from "react-router-dom";
 import { RootState } from "../../store";
 import { logout } from "../../features/auth/authSlice";
 
-const Layout: React.FC = () => {
-  const theme = useTheme();
-  const navigate = useNavigate();
+interface LayoutProps {
+  children: React.ReactNode;
+}
+
+const Layout: React.FC<LayoutProps> = ({ children }) => {
   const dispatch = useDispatch();
-  const { user } = useSelector((state: RootState) => state.auth);
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+  const navigate = useNavigate();
+  const { isAuthenticated, user } = useSelector(
+    (state: RootState) => state.auth
+  );
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -49,68 +52,58 @@ const Layout: React.FC = () => {
     navigate("/");
   };
 
+  const handleProfile = () => {
+    navigate("/profile");
+    handleClose();
+  };
+
+  const handleDashboard = () => {
+    navigate("/dashboard");
+    handleClose();
+  };
+
+  const handleAdmin = () => {
+    navigate("/admin");
+    handleClose();
+  };
+
   return (
-    <Box
-      sx={{
-        display: "flex",
-        flexDirection: "column",
-        minHeight: "100vh",
-        width: "100%",
-      }}
-    >
-      <AppBar
-        position="sticky"
-        elevation={0}
-        sx={{
-          borderBottom: `1px solid ${theme.palette.divider}`,
-          backgroundColor: alpha(theme.palette.background.paper, 0.95),
-          backdropFilter: "blur(6px)",
-          width: "100%",
-        }}
-      >
-        <Toolbar disableGutters sx={{ height: 64, width: "100%", px: 4 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+      <AppBar position="static">
+        <Toolbar>
           <Typography
             variant="h6"
-            component="div"
+            component={Link}
+            to="/"
             sx={{
               flexGrow: 1,
-              cursor: "pointer",
-              fontWeight: 600,
-              color: theme.palette.text.primary,
-              "&:hover": {
-                color: theme.palette.primary.main,
-              },
-              transition: "color 0.2s",
+              textDecoration: "none",
+              color: "inherit",
+              fontWeight: "bold",
             }}
-            onClick={() => navigate("/")}
           >
-            PLAB 2 Practice
+            PLAB 2 Practice Platform
           </Typography>
 
-          {user ? (
-            <Box>
+          {isAuthenticated ? (
+            <Box sx={{ display: "flex", alignItems: "center" }}>
+              <Typography variant="body1" sx={{ mr: 2 }}>
+                Welcome, {user?.name}
+              </Typography>
+
               <IconButton
+                size="large"
+                aria-label="account of current user"
+                aria-controls="menu-appbar"
+                aria-haspopup="true"
                 onClick={handleMenu}
-                sx={{
-                  padding: 0.5,
-                  border: `2px solid ${theme.palette.primary.main}`,
-                  "&:hover": {
-                    backgroundColor: alpha(theme.palette.primary.main, 0.08),
-                  },
-                }}
+                color="inherit"
               >
-                <Avatar
-                  sx={{
-                    width: 32,
-                    height: 32,
-                    backgroundColor: theme.palette.primary.main,
-                    color: theme.palette.primary.contrastText,
-                    fontSize: "1rem",
-                  }}
-                >
-                  {user.name ? user.name[0].toUpperCase() : <AccountCircle />}
+                <Avatar sx={{ width: 32, height: 32 }}>
+                  {user?.name?.charAt(0).toUpperCase()}
                 </Avatar>
               </IconButton>
+
               <Menu
                 id="menu-appbar"
                 anchorEl={anchorEl}
@@ -125,99 +118,54 @@ const Layout: React.FC = () => {
                 }}
                 open={Boolean(anchorEl)}
                 onClose={handleClose}
-                PaperProps={{
-                  elevation: 2,
-                  sx: {
-                    width: 220,
-                    overflow: "visible",
-                    mt: 1.5,
-                    "&:before": {
-                      content: '""',
-                      display: "block",
-                      position: "absolute",
-                      top: 0,
-                      right: 14,
-                      width: 10,
-                      height: 10,
-                      bgcolor: "background.paper",
-                      transform: "translateY(-50%) rotate(45deg)",
-                      zIndex: 0,
-                    },
-                  },
-                }}
               >
-                <Box sx={{ py: 1.5, px: 2 }}>
-                  <Typography variant="subtitle2" noWrap>
-                    {user.name}
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    sx={{ color: "text.secondary" }}
-                    noWrap
-                  >
-                    {user.email}
-                  </Typography>
-                </Box>
-                <Divider />
-                <MenuItem
-                  onClick={() => {
-                    handleClose();
-                    navigate("/dashboard");
-                  }}
-                  sx={{ py: 1.5 }}
-                >
-                  <ListItemIcon>
-                    <DashboardIcon fontSize="small" />
-                  </ListItemIcon>
-                  Dashboard
-                </MenuItem>
-                {user.role === "ADMIN" && (
-                  <MenuItem
-                    onClick={() => {
-                      handleClose();
-                      navigate("/admin");
-                    }}
-                    sx={{ py: 1.5 }}
-                  >
+                {user?.role === "ADMIN" && (
+                  <MenuItem onClick={handleAdmin}>
                     <ListItemIcon>
-                      <AdminIcon fontSize="small" />
+                      <AdminPanelSettings />
                     </ListItemIcon>
                     Admin Panel
                   </MenuItem>
                 )}
-                <Divider />
-                <MenuItem onClick={handleLogout} sx={{ py: 1.5 }}>
+                <MenuItem onClick={handleDashboard}>
                   <ListItemIcon>
-                    <LogoutIcon fontSize="small" />
+                    <DashboardIcon />
+                  </ListItemIcon>
+                  Dashboard
+                </MenuItem>
+
+                <MenuItem onClick={handleProfile}>
+                  <ListItemIcon>
+                    <Person />
+                  </ListItemIcon>
+                  My Profile
+                </MenuItem>
+
+                <Divider />
+
+                <MenuItem onClick={handleLogout}>
+                  <ListItemIcon>
+                    <Logout />
                   </ListItemIcon>
                   Logout
                 </MenuItem>
               </Menu>
             </Box>
           ) : (
-            <Box sx={{ display: "flex", gap: 1 }}>
-              <Button
-                startIcon={<LoginIcon />}
-                onClick={() => navigate("/login")}
-                color="primary"
-                variant="outlined"
-              >
+            <Box>
+              <Button color="inherit" component={Link} to="/login">
                 Login
               </Button>
-              <Button
-                startIcon={<RegisterIcon />}
-                onClick={() => navigate("/register")}
-                color="primary"
-                variant="contained"
-              >
+              <Button color="inherit" component={Link} to="/register">
                 Register
               </Button>
             </Box>
           )}
         </Toolbar>
       </AppBar>
-      <Box component="main" sx={{ flexGrow: 1, width: "100%" }}>
-        <Outlet />
+
+      <Box component="main" sx={{ flexGrow: 1 }}>
+        {children}
       </Box>
     </Box>
   );

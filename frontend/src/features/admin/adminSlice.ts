@@ -5,11 +5,6 @@ interface Case {
   title: string;
   description: string;
   scenario: string;
-  doctorRole: string;
-  patientRole: string;
-  observerNotes: string;
-  learningObjectives: string;
-  duration: number;
   doctorNotes: string;
   patientNotes: string;
   category: {

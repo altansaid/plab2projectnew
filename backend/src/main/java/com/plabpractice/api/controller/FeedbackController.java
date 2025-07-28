@@ -11,6 +11,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -44,9 +45,6 @@ public class FeedbackController {
     @Transactional
     public ResponseEntity<?> submitFeedback(@RequestBody Map<String, Object> feedbackData, Authentication auth) {
         try {
-            System.out.println("🚀 Feedback submission received!");
-            System.out.println("📊 Raw feedback data: " + feedbackData);
-            System.out.println("👤 User: " + auth.getName());
 
             User user = userRepository.findByEmail(auth.getName())
                     .orElseThrow(() -> new RuntimeException("User not found"));
@@ -60,23 +58,9 @@ public class FeedbackController {
             List<Map<String, Object>> criteriaScoresData = (List<Map<String, Object>>) feedbackData
                     .get("criteriaScores");
 
-            System.out.println("🔍 Parsed values:");
-            System.out.println("   sessionCode: " + sessionCode);
-            System.out.println("   comment: " + comment);
-            System.out.println("   requestNewCase: " + requestNewCase);
-            System.out.println("   requestRoleChange: " + requestRoleChange);
-            System.out.println("   criteriaScoresData: " + criteriaScoresData);
-            System.out.println(
-                    "   criteriaScoresData size: " + (criteriaScoresData != null ? criteriaScoresData.size() : "null"));
-
             if (sessionCode == null || comment == null || criteriaScoresData == null) {
-                System.out.println("❌ Missing required fields validation failed!");
                 Map<String, Object> errorResponse = new HashMap<>();
                 errorResponse.put("error", "Missing required fields");
-                errorResponse.put("debug", Map.of(
-                        "sessionCode", sessionCode,
-                        "comment", comment,
-                        "criteriaScores", criteriaScoresData));
                 return ResponseEntity.badRequest().body(errorResponse);
             }
 
@@ -126,8 +110,17 @@ public class FeedbackController {
 
             // Create feedback - this must be saved first before any role changes
             Feedback feedback = feedbackService.createFeedback(session, user, recipient, comment, criteriaScores);
-            System.out.println("✅ Feedback saved successfully with ID: " + feedback.getId() + " for recipient: "
-                    + recipient.getName());
+
+            // Track the current case as used when feedback is submitted
+            if (session.getSelectedCase() != null) {
+                if (session.getUsedCaseIds() == null) {
+                    session.setUsedCaseIds(new ArrayList<>());
+                }
+                if (!session.getUsedCaseIds().contains(session.getSelectedCase().getId())) {
+                    session.getUsedCaseIds().add(session.getSelectedCase().getId());
+                    sessionRepository.save(session);
+                }
+            }
 
             // Mark user as having given feedback
             sessionService.markUserFeedbackGiven(sessionCode, user);
@@ -145,12 +138,9 @@ public class FeedbackController {
                 if (requestRoleChange != null && requestRoleChange) {
                     // Start new case with role change - this happens AFTER feedback is saved
                     shouldStartNewCase = startNewCaseWithRoleChange(session, user);
-                    System.out.println("🔄 New case with role change requested by user, starting immediately: "
-                            + shouldStartNewCase);
                 } else {
                     // Start new case immediately when requested
                     shouldStartNewCase = startNewCaseAutomatically(session);
-                    System.out.println("🔄 New case requested by user, starting immediately: " + shouldStartNewCase);
                 }
             } else {
                 // Check if both patient and observer have submitted feedback for auto new case
@@ -188,44 +178,102 @@ public class FeedbackController {
                     SessionParticipant.Role.OBSERVER);
 
             if (patientGaveFeedback && observerGaveFeedback) {
-                // Both have given feedback, start new case automatically
-                return startNewCaseAutomatically(session);
+                // Both have given feedback, try to start new case automatically
+                boolean newCaseStarted = startNewCaseAutomatically(session);
+
+                // If no new case could be started and this is a recall session, check if we
+                // should end the session
+                if (!newCaseStarted && session.getSessionType() == Session.SessionType.RECALL) {
+                    // No more cases available in recall date range - end the session
+                    System.out.println("🎊 All recall cases completed in date range during feedback - ending session");
+                    session.setStatus(Session.Status.COMPLETED);
+                    session.setPhase(Session.Phase.COMPLETED);
+                    session.setEndTime(LocalDateTime.now());
+                    sessionRepository.save(session);
+
+                    // Notify all participants that session is complete
+                    webSocketService.endSession(session.getCode(),
+                            "🎊 Congratulations! You have completed all available cases in the selected recall date range.");
+                }
+
+                return newCaseStarted;
             }
         } catch (Exception e) {
-            System.out.println("Error checking for new case request: " + e.getMessage());
+            // Log error silently
+            System.err.println("Error in checkAndHandleNewCaseRequest: " + e.getMessage());
         }
         return false;
     }
 
     private boolean startNewCaseAutomatically(Session session) {
         try {
-            // Get a new random case based on the current case's category
+            // Get a new random case based on session type and exclusions
             Case currentCase = session.getSelectedCase();
-            if (currentCase == null || currentCase.getCategory() == null) {
-                return false;
-            }
+            Case newCase = null;
 
-            // Get all cases in the same category
-            List<Case> categoryCases = caseRepository.findByCategoryId(currentCase.getCategory().getId());
-            if (categoryCases.isEmpty()) {
-                return false;
-            }
+            if (session.getSessionType() == Session.SessionType.RECALL) {
+                // For recall sessions, select from recall cases within date range
+                if (session.getRecallStartDate() != null && session.getRecallEndDate() != null) {
+                    // Date range mode
+                    List<Case> allRecallCases = caseRepository.findByIsRecallCaseTrue();
+                    // Use consistent filtering logic (same as SessionController)
+                    List<Long> usedIds = session.getUsedCaseIds() != null ? session.getUsedCaseIds()
+                            : new ArrayList<>();
+                    List<Case> availableCases = allRecallCases.stream()
+                            .filter(c -> c.getRecallDates() != null &&
+                                    c.getRecallDates().stream().anyMatch(
+                                            date -> date.compareTo(session.getRecallStartDate().toString()) >= 0 &&
+                                                    date.compareTo(session.getRecallEndDate().toString()) <= 0))
+                            .filter(c -> !usedIds.contains(c.getId()))
+                            .collect(Collectors.toList());
 
-            // Select a random case from the category (different from the current one)
-            Case newCase;
-            if (categoryCases.size() > 1) {
-                do {
-                    newCase = categoryCases.get((int) (Math.random() * categoryCases.size()));
-                } while (newCase.getId().equals(currentCase.getId()));
+                    if (!availableCases.isEmpty()) {
+                        newCase = availableCases.get((int) (Math.random() * availableCases.size()));
+                    }
+                } else {
+                    // No date range info available
+                    return false;
+                }
             } else {
-                // If there's only one case in the category, use it
-                newCase = categoryCases.get(0);
+                // For topic-based sessions, select from same category but exclude used cases
+                if (currentCase == null || currentCase.getCategory() == null) {
+                    return false;
+                }
+
+                // Get all cases in the same category excluding used ones
+                List<Case> categoryCases = caseRepository.findByCategoryId(currentCase.getCategory().getId());
+
+                // Use consistent filtering logic (same as SessionController)
+                List<Long> usedIds = session.getUsedCaseIds() != null ? session.getUsedCaseIds() : new ArrayList<>();
+                List<Case> availableCases = categoryCases.stream()
+                        .filter(c -> !usedIds.contains(c.getId()))
+                        .collect(Collectors.toList());
+
+                if (!availableCases.isEmpty()) {
+                    newCase = availableCases.get((int) (Math.random() * availableCases.size()));
+                } else {
+                    // No more cases available in this category - don't reset, just return false
+                    return false;
+                }
+            }
+
+            if (newCase == null) {
+                return false;
             }
 
             // Update session with new case
             session.setSelectedCase(newCase);
             session.setPhase(Session.Phase.READING);
             session.setCurrentRound(session.getCurrentRound() + 1); // Increment round number
+
+            // Track the new case as used
+            if (session.getUsedCaseIds() == null) {
+                session.setUsedCaseIds(new ArrayList<>());
+            }
+            if (!session.getUsedCaseIds().contains(newCase.getId())) {
+                session.getUsedCaseIds().add(newCase.getId());
+            }
+
             sessionRepository.save(session);
 
             // Reset session participants' completion status
@@ -236,36 +284,71 @@ public class FeedbackController {
             webSocketService.broadcastPhaseChange(session.getCode(), Session.Phase.READING.toString(),
                     session.getReadingTime() * 60, System.currentTimeMillis());
 
+            // Start the timer for the new reading phase
+            webSocketService.startTimer(session.getCode());
+
             return true;
         } catch (Exception e) {
-            System.out.println("Error starting new case automatically: " + e.getMessage());
             return false;
         }
     }
 
     private boolean startNewCaseWithRoleChange(Session session, User requestingUser) {
         try {
-            // Get a new random case based on the current case's category
+            // Get a new random case based on session type and exclusions
             Case currentCase = session.getSelectedCase();
-            if (currentCase == null || currentCase.getCategory() == null) {
-                return false;
-            }
+            Case newCase = null;
 
-            // Get all cases in the same category
-            List<Case> categoryCases = caseRepository.findByCategoryId(currentCase.getCategory().getId());
-            if (categoryCases.isEmpty()) {
-                return false;
-            }
+            if (session.getSessionType() == Session.SessionType.RECALL) {
+                // For recall sessions, select from recall cases within date range
+                if (session.getRecallStartDate() != null && session.getRecallEndDate() != null) {
+                    // Date range mode
+                    List<Case> allRecallCases = caseRepository.findByIsRecallCaseTrue();
+                    // Use consistent filtering logic (same as SessionController)
+                    List<Long> usedIds = session.getUsedCaseIds() != null ? session.getUsedCaseIds()
+                            : new ArrayList<>();
+                    List<Case> availableCases = allRecallCases.stream()
+                            .filter(c -> c.getRecallDates() != null &&
+                                    c.getRecallDates().stream().anyMatch(
+                                            date -> date.compareTo(session.getRecallStartDate().toString()) >= 0 &&
+                                                    date.compareTo(session.getRecallEndDate().toString()) <= 0))
+                            .filter(c -> !usedIds.contains(c.getId()))
+                            .collect(Collectors.toList());
 
-            // Select a random case from the category (different from the current one)
-            Case newCase;
-            if (categoryCases.size() > 1) {
-                do {
-                    newCase = categoryCases.get((int) (Math.random() * categoryCases.size()));
-                } while (newCase.getId().equals(currentCase.getId()));
+                    if (!availableCases.isEmpty()) {
+                        newCase = availableCases.get((int) (Math.random() * availableCases.size()));
+                    }
+                } else {
+                    // No date range info available
+                    return false;
+                }
             } else {
-                // If there's only one case in the category, use it
-                newCase = categoryCases.get(0);
+                // For topic-based sessions, select from same category but exclude used cases
+                if (currentCase == null || currentCase.getCategory() == null) {
+                    return false;
+                }
+
+                // Get all cases in the same category excluding used ones
+                List<Case> categoryCases = caseRepository.findByCategoryId(currentCase.getCategory().getId());
+
+                // Use consistent filtering logic (same as SessionController)
+                List<Long> usedIds = session.getUsedCaseIds() != null ? session.getUsedCaseIds() : new ArrayList<>();
+                List<Case> availableCases = categoryCases.stream()
+                        .filter(c -> !usedIds.contains(c.getId()))
+                        .collect(Collectors.toList());
+
+                if (!availableCases.isEmpty()) {
+                    newCase = availableCases.get((int) (Math.random() * availableCases.size()));
+                } else {
+                    // No more cases available in this category - don't reset, just return false
+                    System.out.println("❌ No more cases available in category " + currentCase.getCategory().getName()
+                            + " for role change");
+                    return false;
+                }
+            }
+
+            if (newCase == null) {
+                return false;
             }
 
             // Find and swap doctor and patient roles
@@ -294,8 +377,6 @@ public class FeedbackController {
                 participantRepository.save(doctorParticipant);
                 participantRepository.save(patientParticipant);
 
-                System.out.println("🔄 Roles swapped: " + doctorName + " -> PATIENT, " + patientName + " -> DOCTOR");
-
                 // Broadcast role change notification
                 webSocketService.broadcastRoleChange(session.getCode(),
                         "Roles have been swapped: " + doctorName + " is now Patient, " + patientName
@@ -306,6 +387,15 @@ public class FeedbackController {
             session.setSelectedCase(newCase);
             session.setPhase(Session.Phase.READING);
             session.setCurrentRound(session.getCurrentRound() + 1); // Increment round number
+
+            // Track the new case as used
+            if (session.getUsedCaseIds() == null) {
+                session.setUsedCaseIds(new ArrayList<>());
+            }
+            if (!session.getUsedCaseIds().contains(newCase.getId())) {
+                session.getUsedCaseIds().add(newCase.getId());
+            }
+
             sessionRepository.save(session);
 
             // Reset session participants' completion status
@@ -316,9 +406,11 @@ public class FeedbackController {
             webSocketService.broadcastPhaseChange(session.getCode(), Session.Phase.READING.toString(),
                     session.getReadingTime() * 60, System.currentTimeMillis());
 
+            // Start the timer for the new reading phase
+            webSocketService.startTimer(session.getCode());
+
             return true;
         } catch (Exception e) {
-            System.out.println("Error starting new case with role change: " + e.getMessage());
             return false;
         }
     }

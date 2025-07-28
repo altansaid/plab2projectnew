@@ -22,6 +22,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import jakarta.annotation.PreDestroy;
 
 @Service
 public class SessionWebSocketService {
@@ -73,34 +74,55 @@ public class SessionWebSocketService {
         broadcastSessionUpdate(sessionCode);
     }
 
+    public void broadcastTopicSelectionNeeded(String sessionCode, String completedTopic, List<String> availableTopics) {
+        Map<String, Object> topicSelectionData = new HashMap<>();
+        topicSelectionData.put("type", "TOPIC_SELECTION_NEEDED");
+        topicSelectionData.put("sessionCode", sessionCode);
+        topicSelectionData.put("completedTopic", completedTopic);
+        topicSelectionData.put("availableTopics", availableTopics);
+        topicSelectionData.put("message", "🎉 Congratulations! All cases in " + completedTopic
+                + " have been completed. Choose a new topic to continue:");
+
+        messagingTemplate.convertAndSend("/topic/session/" + sessionCode, topicSelectionData);
+    }
+
     public void broadcastParticipantUpdate(String sessionCode) {
         Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
         if (sessionOpt.isPresent()) {
             Session session = sessionOpt.get();
-            // Only get ACTIVE participants
+            // Only get ACTIVE participants with user data eagerly loaded
             List<SessionParticipant> activeParticipants = participantRepository
-                    .findBySessionIdAndIsActive(session.getId(), true);
+                    .findBySessionIdAndIsActiveWithUser(session.getId(), true);
+
+            System.out.println("🔍 Broadcasting participant update for session " + sessionCode);
+            System.out.println("   Found " + activeParticipants.size() + " active participants");
 
             // Enhanced participant data with user information
-            List<Map<String, Object>> participantDetails = activeParticipants.stream().map(p -> {
-                Map<String, Object> detail = new HashMap<>();
-                detail.put("id", p.getId().toString());
-                detail.put("userId", p.getUser().getId());
-                detail.put("name", p.getUser().getName());
-                detail.put("role", p.getRole().toString().toLowerCase());
-                detail.put("isOnline", true); // For now, assume all are online
-                detail.put("hasCompleted", p.getHasCompleted());
-                detail.put("hasGivenFeedback", p.getHasGivenFeedback());
-                return detail;
-            }).toList();
+            List<Map<String, Object>> participantDetails = activeParticipants.stream()
+                    .filter(p -> p.getUser() != null) // Filter out participants with null user
+                    .map(p -> {
+                        Map<String, Object> detail = new HashMap<>();
+                        detail.put("id", p.getUser().getId().toString()); // Use userId as id for frontend compatibility
+                        detail.put("userId", p.getUser().getId());
+                        detail.put("name", p.getUser().getName());
+                        detail.put("role", p.getRole().toString().toLowerCase());
+                        detail.put("isOnline", true); // For now, assume all are online
+                        detail.put("hasCompleted", p.getHasCompleted());
+                        detail.put("hasGivenFeedback", p.getHasGivenFeedback());
+
+                        System.out.println("   Participant: " + p.getUser().getName() + " (" + p.getRole()
+                                + ") - User ID: " + p.getUser().getId());
+
+                        return detail;
+                    }).toList();
+
+            System.out.println("   Sending " + participantDetails.size() + " participant details");
 
             Map<String, Object> participantData = new HashMap<>();
             participantData.put("type", "PARTICIPANT_UPDATE");
             participantData.put("participants", participantDetails);
             participantData.put("sessionCode", sessionCode);
 
-            System.out
-                    .println("Broadcasting participant update: " + activeParticipants.size() + " active participants");
             messagingTemplate.convertAndSend("/topic/session/" + sessionCode, participantData);
         }
     }
@@ -137,7 +159,6 @@ public class SessionWebSocketService {
         Session session = sessionOpt.get();
 
         activeTimers.put(sessionCode, true);
-        System.out.println("Starting client-side timer for session: " + sessionCode);
 
         // Calculate phase duration and set start time
         int phaseDurationSeconds = getCurrentPhaseTime(session);
@@ -146,6 +167,7 @@ public class SessionWebSocketService {
         // Set session timer metadata (save once, not every second)
         session.setTimeRemaining(phaseDurationSeconds);
         session.setPhaseStartTime(LocalDateTime.now());
+        session.setTimerStartTimestamp(startTimestamp); // Store the shared timestamp
         sessionRepository.save(session);
 
         // Send TIMER_START event ONCE with all necessary data for client-side countdown
@@ -159,11 +181,8 @@ public class SessionWebSocketService {
         messagingTemplate.convertAndSend("/topic/session/" + sessionCode, timerStartData);
 
         // Schedule SINGLE task to handle phase transition when timer expires
-        // NO per-second updates, NO database writes, NO WebSocket spam
         ScheduledFuture<?> expiryTask = scheduler.schedule(() -> {
             if (activeTimers.getOrDefault(sessionCode, false)) {
-                System.out.println("Timer expired for session: " + sessionCode + " - triggering phase transition");
-
                 // Reload session to get current state
                 Optional<Session> currentSessionOpt = sessionRepository.findByCode(sessionCode);
                 if (currentSessionOpt.isPresent()) {
@@ -179,22 +198,23 @@ public class SessionWebSocketService {
 
         // Store the expiry task (not a repeating timer)
         timerTasks.put(sessionCode, expiryTask);
-
-        System.out.println("Client-side timer started for session: " + sessionCode +
-                " - duration: " + phaseDurationSeconds + "s, no per-second updates");
     }
 
     public void stopTimer(String sessionCode) {
-        Boolean wasActive = activeTimers.put(sessionCode, false);
-        if (wasActive != null && wasActive) {
-            System.out.println("Stopping timer for session: " + sessionCode);
+        activeTimers.put(sessionCode, false);
+
+        // Clear the stored timer start timestamp to prevent stale data
+        Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
+        if (sessionOpt.isPresent()) {
+            Session session = sessionOpt.get();
+            session.setTimerStartTimestamp(null);
+            sessionRepository.save(session);
         }
 
         // Cancel the scheduled timer task to prevent overlapping timers
         ScheduledFuture<?> timerTask = timerTasks.remove(sessionCode);
         if (timerTask != null && !timerTask.isCancelled()) {
             timerTask.cancel(false);
-            System.out.println("Cancelled timer task for session: " + sessionCode);
         }
     }
 
@@ -376,8 +396,6 @@ public class SessionWebSocketService {
         sessionEndedData.put("reason", reason);
         sessionEndedData.put("timestamp", LocalDateTime.now());
         messagingTemplate.convertAndSend("/topic/session/" + sessionCode, sessionEndedData);
-
-        System.out.println("Session " + sessionCode + " ended: " + reason);
     }
 
     public boolean canStartSession(String sessionCode) {
@@ -423,6 +441,7 @@ public class SessionWebSocketService {
         data.put("status", session.getStatus());
         data.put("timeRemaining", session.getTimeRemaining());
         data.put("totalTime", getCurrentPhaseTime(session));
+        data.put("timerStartTimestamp", session.getTimerStartTimestamp()); // Include shared timestamp
         data.put("currentRound", session.getCurrentRound()); // Include current round for feedback state management
 
         Map<String, Object> config = new HashMap<>();
@@ -434,22 +453,32 @@ public class SessionWebSocketService {
         data.put("config", config);
 
         // Get only ACTIVE participants and format them properly
-        List<SessionParticipant> activeParticipants = participantRepository.findBySessionIdAndIsActive(session.getId(),
+        List<SessionParticipant> activeParticipants = participantRepository.findBySessionIdAndIsActiveWithUser(
+                session.getId(),
                 true);
 
         // Enhanced participant data with user information - same format as
         // broadcastParticipantUpdate
-        List<Map<String, Object>> participantDetails = activeParticipants.stream().map(p -> {
-            Map<String, Object> detail = new HashMap<>();
-            detail.put("id", p.getUser().getId().toString()); // Use userId as id for frontend compatibility
-            detail.put("userId", p.getUser().getId());
-            detail.put("name", p.getUser().getName());
-            detail.put("role", p.getRole().toString().toLowerCase());
-            detail.put("isOnline", true); // For now, assume all are online
-            detail.put("hasCompleted", p.getHasCompleted());
-            detail.put("hasGivenFeedback", p.getHasGivenFeedback());
-            return detail;
-        }).toList();
+        List<Map<String, Object>> participantDetails = activeParticipants.stream()
+                .filter(p -> p.getUser() != null) // Filter out participants with null user
+                .map(p -> {
+                    Map<String, Object> detail = new HashMap<>();
+                    detail.put("id", p.getUser().getId().toString()); // Use userId as id for frontend compatibility
+                    detail.put("userId", p.getUser().getId());
+                    detail.put("name", p.getUser().getName());
+                    detail.put("role", p.getRole().toString().toLowerCase());
+                    detail.put("isOnline", true); // For now, assume all are online
+                    detail.put("hasCompleted", p.getHasCompleted());
+                    detail.put("hasGivenFeedback", p.getHasGivenFeedback());
+
+                    System.out.println("   📋 Session Update - Participant: " + p.getUser().getName() + " ("
+                            + p.getRole() + ") - User ID: " + p.getUser().getId());
+
+                    return detail;
+                }).toList();
+
+        System.out.println("📡 Session Update for " + session.getCode() + " - sending " + participantDetails.size()
+                + " participants");
 
         data.put("participants", participantDetails);
 
@@ -501,17 +530,10 @@ public class SessionWebSocketService {
                     filteredCase.put("description", fullCase.getDescription());
                     // Add role-specific content based on participant role
                     if (participant.getRole().equals("DOCTOR")) {
-                        filteredCase.put("scenario", fullCase.getDoctorScenario());
                         filteredCase.put("sections", fullCase.getDoctorSections());
                     } else {
-                        filteredCase.put("scenario", fullCase.getPatientScenario());
                         filteredCase.put("sections", fullCase.getPatientSections());
                     }
-                    filteredCase.put("doctorRole", fullCase.getDoctorRole());
-                    filteredCase.put("patientRole", fullCase.getPatientRole());
-                    filteredCase.put("observerNotes", fullCase.getObserverNotes());
-                    filteredCase.put("learningObjectives", fullCase.getLearningObjectives());
-                    filteredCase.put("duration", fullCase.getDuration());
                     filteredCase.put("doctorNotes", fullCase.getDoctorNotes());
                     filteredCase.put("patientNotes", fullCase.getPatientNotes());
                     filteredCase.put("imageUrl", fullCase.getImageUrl());
@@ -553,9 +575,6 @@ public class SessionWebSocketService {
         }, DISCONNECT_TIMEOUT_MINUTES, TimeUnit.MINUTES);
 
         disconnectTimeouts.put(userKey, timeoutTask);
-
-        System.out.println("User activity tracked for " + userKey + ", disconnect timeout set for "
-                + DISCONNECT_TIMEOUT_MINUTES + " minutes");
     }
 
     public void handleUserDisconnectTimeout(String sessionCode, Long userId) {
@@ -580,9 +599,6 @@ public class SessionWebSocketService {
 
             if (participantOpt.isPresent()) {
                 SessionParticipant participant = participantOpt.get();
-                System.out
-                        .println("User " + participant.getUser().getName() + " timed out from session " + sessionCode);
-
                 // Use existing handleUserLeave logic
                 handleUserLeave(sessionCode, participant.getUser());
             }
@@ -604,7 +620,43 @@ public class SessionWebSocketService {
         if (timeoutTask != null && !timeoutTask.isCancelled()) {
             timeoutTask.cancel(false);
         }
+    }
 
-        System.out.println("Stopped activity tracking for " + userKey);
+    @PreDestroy
+    public void cleanup() {
+
+        // Cancel all active timer tasks
+        timerTasks.values().forEach(task -> {
+            if (task != null && !task.isCancelled()) {
+                task.cancel(false);
+            }
+        });
+
+        // Cancel all disconnect timeout tasks
+        disconnectTimeouts.values().forEach(task -> {
+            if (task != null && !task.isCancelled()) {
+                task.cancel(false);
+            }
+        });
+
+        // Clear all maps
+        activeTimers.clear();
+        timerTasks.clear();
+        userLastActivity.clear();
+        disconnectTimeouts.clear();
+
+        // Shutdown scheduler gracefully
+        scheduler.shutdown();
+        try {
+            if (!scheduler.awaitTermination(10, TimeUnit.SECONDS)) {
+                scheduler.shutdownNow();
+                if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                    System.err.println("SessionWebSocketService scheduler did not terminate");
+                }
+            }
+        } catch (InterruptedException ie) {
+            scheduler.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 }

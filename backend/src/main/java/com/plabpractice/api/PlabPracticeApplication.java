@@ -10,10 +10,6 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 @EnableJpaRepositories("com.plabpractice.api.repository")
 public class PlabPracticeApplication {
     public static void main(String[] args) {
-        // Log startup information
-        System.out.println("Starting PLAB 2 Practice Application...");
-        System.out.println("Active Profile: " + System.getProperty("spring.profiles.active", "default"));
-
         SpringApplication.run(PlabPracticeApplication.class, args);
     }
 }

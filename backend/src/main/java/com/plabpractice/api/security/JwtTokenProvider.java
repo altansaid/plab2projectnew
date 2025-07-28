@@ -21,25 +21,34 @@ public class JwtTokenProvider {
 
     private Key getSigningKey() {
         if (jwtSecret == null || jwtSecret.trim().isEmpty()) {
-            System.err.println("❌ CRITICAL: JWT secret is not configured!");
             throw new IllegalStateException(
                     "JWT secret cannot be null or empty. Please set JWT_SECRET environment variable.");
         }
         if (jwtSecret.length() < 32) {
-            System.err.println(
-                    "⚠️  WARNING: JWT secret should be at least 32 characters long for security. Current length: "
-                            + jwtSecret.length());
+            // Log warning but don't expose secret length in production
         }
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
 
     public String generateToken(Authentication authentication) {
-        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+        Object principal = authentication.getPrincipal();
+        String username;
+
+        if (principal instanceof UserDetails) {
+            UserDetails userDetails = (UserDetails) principal;
+            username = userDetails.getUsername();
+        } else if (principal instanceof String) {
+            username = (String) principal;
+        } else {
+            throw new IllegalArgumentException(
+                    "Principal must be either UserDetails or String, but was: " + principal.getClass().getName());
+        }
+
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtExpirationInMs);
 
         return Jwts.builder()
-                .setSubject(userDetails.getUsername())
+                .setSubject(username)
                 .setIssuedAt(new Date())
                 .setExpiration(expiryDate)
                 .signWith(getSigningKey())

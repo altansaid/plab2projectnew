@@ -52,7 +52,6 @@ const SessionCreateSimple: React.FC = () => {
         setError("Failed to create session");
       }
     } catch (error: any) {
-      console.error("Failed to create session:", error);
       const errorMessage =
         error.response?.data?.error ||
         error.message ||

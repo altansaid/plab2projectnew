@@ -22,7 +22,7 @@ const SessionJoin: React.FC = () => {
 
     try {
       const response = await api.post("/sessions/join", { code: sessionCode });
-      navigate(`/session/${sessionCode}/select-role`);
+      navigate(`/session/${sessionCode}/role`);
     } catch (error) {
       setError("Invalid session code or session is full");
     }

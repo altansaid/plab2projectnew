@@ -20,8 +20,13 @@ import {
   Divider,
   Alert,
   SelectChangeEvent,
+  TextField,
 } from "@mui/material";
-import { Groups as GroupsIcon, Timer as TimerIcon } from "@mui/icons-material";
+import {
+  Groups as GroupsIcon,
+  Timer as TimerIcon,
+  DateRange as DateRangeIcon,
+} from "@mui/icons-material";
 import { RootState } from "../../store";
 import { SessionRole } from "../../features/session/sessionSlice";
 import {
@@ -33,7 +38,9 @@ import {
 interface SessionConfig {
   sessionType: "topic" | "recall";
   selectedTopics: string[];
-  recallDate?: string;
+  recallDate?: string; // Keep for backward compatibility
+  recallStartDate?: Date | null;
+  recallEndDate?: Date | null;
   readingTime: number;
   consultationTime: number;
   timingType: "countdown" | "stopwatch";
@@ -61,6 +68,8 @@ const ConfigureSession: React.FC = () => {
     sessionType: "topic",
     selectedTopics: [],
     recallDate: "",
+    recallStartDate: null,
+    recallEndDate: null,
     readingTime: 2,
     consultationTime: 8,
     timingType: "countdown",
@@ -80,12 +89,6 @@ const ConfigureSession: React.FC = () => {
 
   useEffect(() => {
     const loadData = async () => {
-      console.log("Loading data with authentication:", {
-        user: !!user,
-        token: !!token,
-        isAuthenticated,
-      });
-
       try {
         // Load topics first
         const topicsResponse = await getCategories();
@@ -93,26 +96,19 @@ const ConfigureSession: React.FC = () => {
           (category: any) => category.name
         );
         setAvailableTopics([...topics, "Random"]);
-        console.log("Topics loaded successfully:", topics.length);
 
         // Load recall dates with proper error handling
         try {
-          console.log("Loading recall dates...");
           const recallDatesResponse = await getAllRecallDates();
-          console.log("Recall dates response:", recallDatesResponse.data);
           setAvailableRecallDates(recallDatesResponse.data || []);
         } catch (recallError: any) {
-          console.error("Failed to load recall dates:", recallError);
           // Check if it's an authentication error
           if (recallError.response?.status === 403) {
-            console.error(
-              "Authentication error when loading recall dates - user not properly authenticated"
-            );
+            // Authentication error - handle silently or show user message
           }
           setAvailableRecallDates([]);
         }
       } catch (error) {
-        console.error("Failed to load topics:", error);
         // Fallback to default topics
         setAvailableTopics([
           "Cardiology",
@@ -137,14 +133,8 @@ const ConfigureSession: React.FC = () => {
 
     // Only load data if user is authenticated and has a token
     if (isAuthenticated && user && token) {
-      console.log("User is authenticated, loading data...");
       loadData();
     } else {
-      console.log("User not authenticated, skipping data load:", {
-        isAuthenticated,
-        user: !!user,
-        token: !!token,
-      });
       setLoading(false);
     }
   }, [user, token, isAuthenticated]);
@@ -161,6 +151,8 @@ const ConfigureSession: React.FC = () => {
       sessionType: newType,
       selectedTopics: newType === "recall" ? [] : prev.selectedTopics,
       recallDate: newType === "topic" ? "" : prev.recallDate,
+      recallStartDate: newType === "topic" ? null : prev.recallStartDate,
+      recallEndDate: newType === "topic" ? null : prev.recallEndDate,
     }));
   };
 
@@ -198,7 +190,11 @@ const ConfigureSession: React.FC = () => {
     if (config.sessionType === "topic") {
       return config.selectedTopics.length > 0;
     } else if (config.sessionType === "recall") {
-      return config.recallDate && config.recallDate.length > 0;
+      // Check if either date range is set OR single date is set (backward compatibility)
+      return (
+        (config.recallStartDate && config.recallEndDate) ||
+        (config.recallDate && config.recallDate.length > 0)
+      );
     }
     return true;
   };
@@ -208,7 +204,9 @@ const ConfigureSession: React.FC = () => {
       if (config.sessionType === "topic") {
         setError("Please select at least one topic for topic-based practice");
       } else {
-        setError("Please select a recall date for recall practice");
+        setError(
+          "Please select a date range for recall practice (both start and end dates are required)"
+        );
       }
       return;
     }
@@ -220,17 +218,16 @@ const ConfigureSession: React.FC = () => {
         sessionType: config.sessionType.toUpperCase(),
         selectedTopics: config.selectedTopics,
         recallDate: config.recallDate,
+        recallStartDate: config.recallStartDate
+          ? config.recallStartDate.toISOString().split("T")[0]
+          : undefined,
+        recallEndDate: config.recallEndDate
+          ? config.recallEndDate.toISOString().split("T")[0]
+          : undefined,
         readingTime: config.readingTime,
         consultationTime: config.consultationTime,
         timingType: config.timingType.toUpperCase(),
       };
-
-      console.log(
-        "Configuring session:",
-        sessionCode,
-        "with data:",
-        configData
-      );
 
       // Configure session with backend
       await configureSession(sessionCode!, configData);
@@ -245,7 +242,6 @@ const ConfigureSession: React.FC = () => {
         },
       });
     } catch (error: any) {
-      console.error("Failed to configure session:", error);
       const errorMessage =
         error.response?.data?.error ||
         error.message ||
@@ -438,69 +434,135 @@ const ConfigureSession: React.FC = () => {
               </Card>
             )}
 
-            {/* Recall Date Selection */}
+            {/* Recall Date Range Selection */}
             {config.sessionType === "recall" && (
               <Card sx={{ mb: 4 }}>
                 <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    Choose Recall Date
-                  </Typography>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                      mb: 2,
+                    }}
+                  >
+                    <DateRangeIcon color="primary" />
+                    <Typography variant="h6">
+                      Choose Recall Date Range
+                    </Typography>
+                  </Box>
                   <Typography variant="body2" color="text.secondary" paragraph>
-                    Select the date for which you want to practice recall cases
+                    Select a date range to practice cases that fall within this
+                    period. This allows you to practice multiple related cases
+                    from a specific time frame.
                   </Typography>
 
-                  {loading ? (
+                  <Grid container spacing={2} sx={{ mb: 2 }}>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Start Date"
+                        type="date"
+                        fullWidth
+                        value={
+                          config.recallStartDate
+                            ? config.recallStartDate.toISOString().split("T")[0]
+                            : ""
+                        }
+                        onChange={(e) => {
+                          const date = e.target.value
+                            ? new Date(e.target.value)
+                            : null;
+                          setConfig((prev) => ({
+                            ...prev,
+                            recallStartDate: date,
+                          }));
+                        }}
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                        inputProps={{
+                          max: config.recallEndDate
+                            ? config.recallEndDate.toISOString().split("T")[0]
+                            : undefined,
+                        }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="End Date"
+                        type="date"
+                        fullWidth
+                        value={
+                          config.recallEndDate
+                            ? config.recallEndDate.toISOString().split("T")[0]
+                            : ""
+                        }
+                        onChange={(e) => {
+                          const date = e.target.value
+                            ? new Date(e.target.value)
+                            : null;
+                          setConfig((prev) => ({
+                            ...prev,
+                            recallEndDate: date,
+                          }));
+                        }}
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                        inputProps={{
+                          min: config.recallStartDate
+                            ? config.recallStartDate.toISOString().split("T")[0]
+                            : undefined,
+                        }}
+                      />
+                    </Grid>
+                  </Grid>
+
+                  {config.recallStartDate && config.recallEndDate && (
+                    <Box
+                      sx={{
+                        p: 2,
+                        backgroundColor: "#e3f2fd",
+                        borderRadius: 1,
+                        border: "1px solid #bbdefb",
+                      }}
+                    >
+                      <Typography variant="body2" color="primary">
+                        📅 Selected Range:{" "}
+                        {config.recallStartDate.toLocaleDateString()} to{" "}
+                        {config.recallEndDate.toLocaleDateString()}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Cases with recall dates in this range will be available
+                        for practice
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {loading && (
                     <Box
                       sx={{
                         p: 3,
                         textAlign: "center",
                         backgroundColor: "#f5f5f5",
                         borderRadius: 1,
+                        mt: 2,
                       }}
                     >
                       <Typography variant="body1" color="text.secondary">
-                        Loading recall dates...
+                        Loading available recall dates...
                       </Typography>
                     </Box>
-                  ) : availableRecallDates.length > 0 ? (
-                    <FormControl fullWidth sx={{ mb: 2 }}>
-                      <InputLabel>Select Recall Date</InputLabel>
-                      <Select
-                        value={config.recallDate || ""}
-                        onChange={(e) =>
-                          setConfig((prev) => ({
-                            ...prev,
-                            recallDate: e.target.value,
-                          }))
-                        }
-                        label="Select Recall Date"
-                      >
-                        {availableRecallDates.map((date) => {
-                          // Format date without timezone issues
-                          const formatDateLocal = (dateStr: string) => {
-                            const [year, month, day] = dateStr.split("-");
-                            return new Date(
-                              parseInt(year),
-                              parseInt(month) - 1,
-                              parseInt(day)
-                            ).toLocaleDateString();
-                          };
+                  )}
 
-                          return (
-                            <MenuItem key={date} value={date}>
-                              {formatDateLocal(date)}
-                            </MenuItem>
-                          );
-                        })}
-                      </Select>
-                    </FormControl>
-                  ) : (
+                  {!loading && availableRecallDates.length === 0 && (
                     <Box
                       sx={{
                         p: 3,
                         textAlign: "center",
                         backgroundColor: "#f5f5f5",
                         borderRadius: 1,
+                        mt: 2,
                       }}
                     >
                       <Typography variant="body1" color="text.secondary">
@@ -673,6 +735,19 @@ const ConfigureSession: React.FC = () => {
                       {config.selectedTopics.length > 0
                         ? config.selectedTopics.join(", ")
                         : "None selected"}
+                    </Typography>
+                  </Box>
+                )}
+
+                {config.sessionType === "recall" && (
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Recall Date Range:
+                    </Typography>
+                    <Typography variant="body1" fontWeight="medium">
+                      {config.recallStartDate && config.recallEndDate
+                        ? `${config.recallStartDate.toLocaleDateString()} - ${config.recallEndDate.toLocaleDateString()}`
+                        : "Not selected"}
                     </Typography>
                   </Box>
                 )}

@@ -101,3 +101,9 @@ setup-postgresql-with-passwords.sql
 
 # Database scripts
 *.sql 
+
+PROJECT_METRICS.md
+DEVELOPMENT_SUMMARY_JULY_2025.md
+
+start-backend.sh 
+/docs/timer-synchronization-architecture.md

@@ -19,14 +19,25 @@ api.interceptors.request.use(
   (config) => {
     const state = store.getState();
     const token = state.auth.token;
+    
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+      (error) => {
+      return Promise.reject(error);
+    }
+);
+
+// Response interceptor for API calls
+api.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+      (error) => {
+      return Promise.reject(error);
+    }
 );
 
 // WebSocket client
@@ -46,10 +57,10 @@ export const connectWebSocket = (sessionCode: string, handlers: {
   onSessionEnded?: (data: any) => void;
   onUserLeft?: (data: any) => void;
   onRoleChange?: (data: any) => void;
+  onTopicSelectionNeeded?: (data: any) => void;
 }) => {
   // Prevent multiple connection attempts
   if (isConnecting || (stompClient && stompClient.connected)) {
-    console.log('WebSocket already connecting or connected, skipping...');
     return stompClient;
   }
 
@@ -68,9 +79,6 @@ export const connectWebSocket = (sessionCode: string, handlers: {
   isConnecting = true;
   connectionAttempts++;
   
-  console.log('Connecting to WebSocket with SockJS:', WS_URL);
-  console.log('Session code:', sessionCode, 'Attempt:', connectionAttempts);
-
   stompClient = new Client({
     webSocketFactory: () => {
       // Use SockJS for better compatibility
@@ -93,65 +101,56 @@ export const connectWebSocket = (sessionCode: string, handlers: {
       }
     },
     onConnect: (frame) => {
-      console.log('Connected to WebSocket successfully!', frame);
       isConnecting = false;
       connectionAttempts = 0; // Reset on successful connection
       
       // Subscribe to general session updates
       const subscription1 = stompClient?.subscribe(`/topic/session/${sessionCode}`, (message) => {
-        console.log('Received WebSocket message:', message.body);
         try {
           const data = JSON.parse(message.body);
           
           switch (data.type) {
             case 'SESSION_UPDATE':
-              console.log('Session update received:', data);
               handlers.onSessionUpdate?.(data);
               break;
             case 'PARTICIPANT_UPDATE':
-              console.log('Participant update received:', data.participants);
               handlers.onParticipantUpdate?.(data.participants);
               break;
             case 'PHASE_CHANGE':
-              console.log('Phase change received:', data);
               handlers.onPhaseChange?.(data);
               break;
             case 'TIMER_START':
-              console.log('Timer start received:', data);
               handlers.onTimerStart?.(data);
               break;
             case 'SESSION_ENDED':
-              console.log('Session ended received:', data);
               handlers.onSessionEnded?.(data);
               break;
             case 'USER_LEFT':
-              console.log('User left received:', data);
               handlers.onUserLeft?.(data);
               break;
             case 'ROLE_CHANGE':
-              console.log('Role change received:', data);
               handlers.onRoleChange?.(data);
               break;
+            case 'TOPIC_SELECTION_NEEDED':
+              handlers.onTopicSelectionNeeded?.(data);
+              break;
             default:
-              console.log('Unknown message type:', data.type, data);
+              break;
           }
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
         }
       });
-      console.log('Subscribed to session updates:', subscription1?.id);
 
       // Subscribe to session messages
       if (handlers.onMessage) {
         const subscription2 = stompClient?.subscribe(`/topic/session/${sessionCode}/messages`, (message) => {
-          console.log('Received session message:', message.body);
           try {
             handlers.onMessage?.(JSON.parse(message.body));
           } catch (error) {
             console.error('Error parsing session message:', error);
           }
         });
-        console.log('Subscribed to session messages:', subscription2?.id);
       }
     },
     onDisconnect: () => {
@@ -294,6 +293,12 @@ export const getRandomCase = (topics?: string[]) =>
 export const requestNewCase = (sessionCode: string) =>
   api.post(`/sessions/${sessionCode}/new-case`);
 
+export const selectNewTopic = (sessionCode: string, topic: string) =>
+  api.post(`/sessions/${sessionCode}/select-new-topic`, { topic });
+
+export const endSession = (sessionCode: string) =>
+  api.post(`/sessions/${sessionCode}/end`);
+
 export const getCategories = () =>
   api.get('/categories');
 
@@ -316,13 +321,8 @@ export const submitFeedback = async (sessionCode: string, feedbackData: {
       sessionCode,
       ...feedbackData
     };
-    console.log('🚀 Submitting feedback to API:');
-    console.log('   sessionCode:', sessionCode);
-    console.log('   feedbackData:', JSON.stringify(feedbackData, null, 2));
-    console.log('   final payload:', JSON.stringify(payload, null, 2));
     
     const response = await api.post('/feedback/submit', payload);
-    console.log('✅ Feedback submitted successfully:', response.data);
     return response;
   } catch (error: any) {
     console.error('❌ Detailed feedback submission error:');
@@ -349,8 +349,24 @@ export const getAllRecallDates = () =>
 export const getRecallCasesByDate = (date: string) =>
   api.get(`/cases/recall/by-date?date=${date}`);
 
+export const getRecallCasesByDateRange = (startDate: string, endDate: string) =>
+  api.get(`/cases/recall/by-date-range?startDate=${startDate}&endDate=${endDate}`);
+
 export const getRandomRecallCase = (date: string) =>
   api.get(`/cases/recall/random?date=${date}`);
+
+export const getRandomRecallCaseFromRange = (startDate: string, endDate: string, excludeCaseIds?: number[]) => {
+  const params = new URLSearchParams({
+    startDate,
+    endDate,
+  });
+  
+  if (excludeCaseIds && excludeCaseIds.length > 0) {
+    excludeCaseIds.forEach(id => params.append('excludeCaseIds', id.toString()));
+  }
+  
+  return api.get(`/cases/recall/random-from-range?${params.toString()}`);
+};
 
 export const getReceivedFeedback = () =>
   api.get('/feedback/received');

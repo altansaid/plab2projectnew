@@ -4,7 +4,10 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -59,6 +62,18 @@ public class Session {
     @Column(name = "current_round", nullable = false)
     private Integer currentRound = 1; // Track which round/case iteration we're on
 
+    // Track used cases to prevent duplicates
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", name = "used_case_ids")
+    private List<Long> usedCaseIds = new ArrayList<>();
+
+    // For recall mode - store date range
+    @Column(name = "recall_start_date")
+    private LocalDate recallStartDate;
+
+    @Column(name = "recall_end_date")
+    private LocalDate recallEndDate;
+
     @Column(name = "time_remaining", nullable = false)
     private Integer timeRemaining = 0; // in seconds
 
@@ -73,6 +88,9 @@ public class Session {
 
     @Column(name = "phase_start_time")
     private LocalDateTime phaseStartTime;
+
+    @Column(name = "timer_start_timestamp")
+    private Long timerStartTimestamp; // Store the original shared timestamp in milliseconds
 
     @ManyToOne
     @JoinColumn(name = "created_by")

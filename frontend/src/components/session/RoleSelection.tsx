@@ -118,7 +118,6 @@ const RoleSelection: React.FC = () => {
       try {
         // Get session information from backend
         const response = await api.get(`/sessions/${sessionCode}`);
-        console.log("Session data received:", response.data);
 
         setSessionInfo({
           id: response.data.id,
@@ -128,7 +127,6 @@ const RoleSelection: React.FC = () => {
           status: response.data.status || "waiting",
         });
       } catch (error: any) {
-        console.error("Failed to load session:", error);
         setError("Failed to load session information");
       } finally {
         setLoading(false);
@@ -193,7 +191,6 @@ const RoleSelection: React.FC = () => {
         });
       }
     } catch (error: any) {
-      console.error("Failed to join session with role:", error);
       const errorMessage =
         error.response?.data?.error ||
         error.message ||
@@ -207,9 +204,6 @@ const RoleSelection: React.FC = () => {
     sessionInfo?.participants
       .map((p) => String(p.role).toLowerCase())
       .filter(Boolean) || [];
-
-  console.log("Current participants:", sessionInfo?.participants);
-  console.log("Taken roles:", takenRoles);
 
   // Check if a role is available
   const isRoleAvailable = (role: SessionRole) => {
