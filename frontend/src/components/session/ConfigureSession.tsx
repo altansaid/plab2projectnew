@@ -300,7 +300,10 @@ const ConfigureSession: React.FC = () => {
               {participants.map((participant, index) => (
                 <Chip
                   key={index}
-                  label={`${participant.username} (${participant.role})`}
+                  label={`${participant.username} (${
+                    participant.role.charAt(0).toUpperCase() +
+                    participant.role.slice(1)
+                  })`}
                   sx={{
                     backgroundColor: `${getRoleColor(participant.role)}20`,
                     color: getRoleColor(participant.role),

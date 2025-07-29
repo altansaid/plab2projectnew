@@ -88,7 +88,7 @@ public class Case {
     @Column(columnDefinition = "jsonb", name = "visual_data")
     private VisualData visualData;
 
-    @ElementCollection
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "case_topics", joinColumns = @JoinColumn(name = "case_id"))
     @Column(name = "topic")
     private List<String> topics;
