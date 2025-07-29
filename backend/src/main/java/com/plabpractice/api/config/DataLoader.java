@@ -47,14 +47,13 @@ public class DataLoader implements CommandLineRunner {
                                 System.out.println("Users already exist, skipping user creation");
                         }
 
-                        // Delete all existing cases and categories
-                        System.out.println("Deleting existing cases and categories...");
-                        caseRepository.deleteAll();
-                        categoryRepository.deleteAll();
-
-                        // Load new categories and cases
-                        System.out.println("Loading new categories and cases...");
-                        loadCategoriesAndCases();
+                        // Load default categories and cases only if database is empty
+                        if (categoryRepository.count() == 0) {
+                                System.out.println("Database is empty, loading default categories and cases...");
+                                loadCategoriesAndCases();
+                        } else {
+                                System.out.println("Categories and cases already exist, skipping data loading");
+                        }
 
                         System.out.println("=== DataLoader: Initialization complete ===");
                 } catch (Exception e) {
