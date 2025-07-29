@@ -36,31 +36,11 @@ public class DataLoader implements CommandLineRunner {
 
         @Override
         public void run(String... args) throws Exception {
-                try {
-                        System.out.println("=== DataLoader: Starting data initialization ===");
-
-                        // Load default users if database is empty
-                        if (userRepository.count() == 0) {
-                                System.out.println("Database is empty, loading default users...");
-                                loadDefaultUsers();
-                        } else {
-                                System.out.println("Users already exist, skipping user creation");
-                        }
-
-                        // Load default categories and cases only if database is empty
-                        if (categoryRepository.count() == 0) {
-                                System.out.println("Database is empty, loading default categories and cases...");
-                                loadCategoriesAndCases();
-                        } else {
-                                System.out.println("Categories and cases already exist, skipping data loading");
-                        }
-
-                        System.out.println("=== DataLoader: Initialization complete ===");
-                } catch (Exception e) {
-                        System.err.println("❌ Error during data loading: " + e.getMessage());
-                        e.printStackTrace();
-                        System.err.println("⚠️  Application will continue without sample data");
-                }
+                // DataLoader completely disabled - no mock data will be loaded
+                // Users should create their own categories and cases through the admin
+                // interface
+                System.out.println("=== DataLoader: DISABLED - No mock data will be loaded ===");
+                System.out.println("Create your own categories and cases through the application interface.");
         }
 
         private void loadDefaultUsers() {
