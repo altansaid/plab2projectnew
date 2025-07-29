@@ -3,6 +3,7 @@ package com.plabpractice.api.model;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -22,5 +23,6 @@ public class Category {
     private String description;
 
     @OneToMany(mappedBy = "category", cascade = CascadeType.ALL)
+    @JsonIgnore
     private Set<Case> cases = new HashSet<>();
 }
