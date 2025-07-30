@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
-  Button,
   Card,
   CardContent,
   Container,
@@ -11,14 +10,15 @@ import {
   Link,
   Divider,
   Stack,
+  Button,
 } from "@mui/material";
-import { Google as GoogleIcon } from "@mui/icons-material";
 import { Link as RouterLink, useNavigate, useLocation } from "react-router-dom";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { useDispatch } from "react-redux";
 import { loginSuccess } from "../../features/auth/authSlice";
 import { api } from "../../services/api";
+import GoogleSignInButton from "./GoogleSignInButton";
 
 // Google Sign-In types
 declare global {
@@ -58,9 +58,19 @@ const Login: React.FC = () => {
   const [error, setError] = useState<string>("");
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isGoogleScriptLoaded, setIsGoogleScriptLoaded] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string>("");
   const googleButtonRef = useRef<HTMLDivElement>(null);
 
   const from = location.state?.from?.pathname || "/dashboard";
+
+  // Check for success message from registration
+  useEffect(() => {
+    if (location.state?.message) {
+      setSuccessMessage(location.state.message);
+      // Clear the message from location state
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location, navigate]);
 
   // Load Google Script
   useEffect(() => {
@@ -132,6 +142,7 @@ const Login: React.FC = () => {
         auto_select: false,
       });
 
+      // Render hidden Google button
       if (googleButtonRef.current) {
         window.google.accounts.id.renderButton(googleButtonRef.current, {
           type: "standard",
@@ -163,6 +174,7 @@ const Login: React.FC = () => {
     onSubmit: async (values, { setSubmitting }) => {
       try {
         setError("");
+        setSuccessMessage(""); // Clear success message on new login attempt
         const response = await api.post("/auth/login", values);
         dispatch(loginSuccess(response.data));
         navigate(from, { replace: true });
@@ -178,6 +190,7 @@ const Login: React.FC = () => {
     try {
       setIsGoogleLoading(true);
       setError("");
+      setSuccessMessage(""); // Clear success message on Google login attempt
 
       // Google credential received - processing securely (credential not logged for security)
 
@@ -205,11 +218,25 @@ const Login: React.FC = () => {
     }
   };
 
+  const handleGoogleSignIn = () => {
+    if (googleButtonRef.current) {
+      // Find and click the actual Google button inside the hidden div
+      const googleButton = googleButtonRef.current.querySelector(
+        'div[role="button"]'
+      ) as HTMLElement;
+      if (googleButton) {
+        googleButton.click();
+      }
+    } else {
+      setError("Google Sign-In is not available. Please try again later.");
+    }
+  };
+
   return (
     <Container maxWidth="sm">
       <Box
         sx={{
-          mt: 8,
+          marginTop: 8,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
@@ -217,9 +244,21 @@ const Login: React.FC = () => {
       >
         <Card sx={{ width: "100%", maxWidth: 400 }}>
           <CardContent sx={{ p: 4 }}>
-            <Typography variant="h4" component="h1" gutterBottom align="center">
+            <Typography
+              component="h1"
+              variant="h4"
+              align="center"
+              gutterBottom
+              sx={{ mb: 3 }}
+            >
               Sign In
             </Typography>
+
+            {successMessage && (
+              <Alert severity="success" sx={{ mb: 2 }}>
+                {successMessage}
+              </Alert>
+            )}
 
             {error && (
               <Alert severity="error" sx={{ mb: 2 }}>
@@ -233,8 +272,7 @@ const Login: React.FC = () => {
                   fullWidth
                   id="email"
                   name="email"
-                  label="Email Address"
-                  type="email"
+                  label="Email"
                   value={formik.values.email}
                   onChange={formik.handleChange}
                   onBlur={formik.handleBlur}
@@ -285,16 +323,24 @@ const Login: React.FC = () => {
               </Typography>
             </Divider>
 
+            {/* Hidden Google button for actual functionality */}
             <Box
               ref={googleButtonRef}
               sx={{
-                display: "flex",
-                justifyContent: "center",
-                mb: 2,
-                opacity: isGoogleLoading ? 0.7 : 1,
-                pointerEvents: isGoogleLoading ? "none" : "auto",
+                position: "absolute",
+                top: -9999,
+                left: -9999,
+                visibility: "hidden",
               }}
             />
+
+            <Box sx={{ mb: 2 }}>
+              <GoogleSignInButton
+                onClick={handleGoogleSignIn}
+                disabled={!isGoogleScriptLoaded}
+                isLoading={isGoogleLoading}
+              />
+            </Box>
 
             <Box sx={{ textAlign: "center", mt: 2 }}>
               <Typography variant="body2">
