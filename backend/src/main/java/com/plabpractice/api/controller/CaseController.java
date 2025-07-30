@@ -8,6 +8,8 @@ import com.plabpractice.api.repository.CategoryRepository;
 import com.plabpractice.api.repository.SessionRepository;
 import com.plabpractice.api.exception.ResourceNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -103,6 +105,7 @@ public class CaseController {
     }
 
     @GetMapping("/recall/dates")
+    @Cacheable(value = "recallDates", unless = "#result.body == null || #result.body.isEmpty()")
     public ResponseEntity<List<String>> getAllRecallDates() {
         List<Case> recallCases = caseRepository.findByIsRecallCaseTrue();
         List<String> dates = recallCases.stream()
@@ -231,6 +234,7 @@ public class CaseController {
 
     @PostMapping
     // @PreAuthorize("hasRole('ADMIN')") // Temporarily disabled for testing
+    @CacheEvict(value = { "recallDates" }, allEntries = true)
     public Case createCase(@RequestBody Case caseData) {
         Category category = categoryRepository.findById(caseData.getCategory().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
@@ -244,6 +248,7 @@ public class CaseController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
+    @CacheEvict(value = { "recallDates" }, allEntries = true)
     public Case updateCase(@PathVariable Long id, @RequestBody Case caseData) {
         Case existingCase = caseRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Case not found"));
@@ -297,6 +302,7 @@ public class CaseController {
     }
 
     @DeleteMapping("/{id}")
+    @CacheEvict(value = { "recallDates" }, allEntries = true)
     public ResponseEntity<?> deleteCase(@PathVariable Long id) {
         return caseRepository.findById(id)
                 .map(case_ -> {

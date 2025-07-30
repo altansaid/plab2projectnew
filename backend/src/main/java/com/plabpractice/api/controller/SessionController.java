@@ -19,6 +19,7 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.Authentication;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -820,8 +821,9 @@ public class SessionController {
 
             Map<String, Object> response = new HashMap<>();
 
-            // Fetch participants as DTOs to avoid lazy loading issues
-            List<SessionParticipantDTO> participantDTOs = sessionService.getSessionParticipantDTOs(session.getId());
+            // Fetch participants as DTOs using optimized method to avoid N+1 queries
+            List<SessionParticipantDTO> participantDTOs = sessionService
+                    .getSessionParticipantDTOsOptimized(session.getId());
 
             // Convert DTOs to the same flat structure used in WebSocket updates for
             // consistency
@@ -990,8 +992,10 @@ public class SessionController {
     @GetMapping("/active")
     public ResponseEntity<?> getActiveSessions() {
         try {
-            List<Session> activeSessions = sessionRepository.findByStatus(Session.Status.IN_PROGRESS);
-            // Convert to DTOs to avoid lazy loading issues
+            // Use optimized method that avoids loading heavy session data
+            List<Session> activeSessions = sessionService.getActiveSessionsOptimized();
+
+            // Convert to DTOs using optimized participant count
             List<Map<String, Object>> sessionDTOs = activeSessions.stream()
                     .map(session -> {
                         Map<String, Object> sessionData = new HashMap<>();
@@ -1002,8 +1006,9 @@ public class SessionController {
                         sessionData.put("phase", session.getPhase());
                         sessionData.put("createdAt", session.getCreatedAt());
                         sessionData.put("startTime", session.getStartTime());
-                        // Get participant count separately
-                        int participantCount = sessionService.getSessionParticipants(session.getId()).size();
+                        // Use optimized count method to avoid N+1 queries
+                        long participantCount = sessionParticipantRepository
+                                .countBySessionIdAndIsActive(session.getId(), true);
                         sessionData.put("participantCount", participantCount);
                         return sessionData;
                     })
@@ -1035,10 +1040,9 @@ public class SessionController {
             User user = userRepository.findByEmail(auth.getName())
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
-            // Get user's active sessions (CREATED or IN_PROGRESS) where the participant is
-            // still active
+            // Get user's active sessions using optimized method to avoid N+1 queries
             List<SessionParticipant> userParticipations = sessionParticipantRepository
-                    .findByUserIdAndIsActive(user.getId(), true);
+                    .findByUserIdAndIsActiveWithSessions(user.getId(), true);
             List<Session> activeSessions = userParticipations.stream()
                     .map(SessionParticipant::getSession)
                     .filter(session -> session.getStatus() == Session.Status.CREATED ||
@@ -1063,8 +1067,9 @@ public class SessionController {
                         sessionData.put("userRole", userRole != null ? userRole.toString() : null);
                         sessionData.put("isHost", isHost);
 
-                        // Get active participant count
-                        int participantCount = sessionService.getSessionParticipants(session.getId()).size();
+                        // Use optimized count method to avoid N+1 queries
+                        long participantCount = sessionParticipantRepository
+                                .countBySessionIdAndIsActive(session.getId(), true);
                         sessionData.put("participantCount", participantCount);
 
                         return sessionData;
@@ -1082,6 +1087,7 @@ public class SessionController {
     // Feedback endpoints moved to FeedbackController
 
     @GetMapping("/categories")
+    @Cacheable(value = "categories", unless = "#result.body == null")
     public ResponseEntity<?> getCategories() {
         try {
             List<Category> categories = categoryRepository.findAll();

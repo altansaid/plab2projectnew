@@ -7,11 +7,15 @@ import org.springframework.context.event.EventListener;
 import org.springframework.core.env.Environment;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.jdbc.DataSourceBuilder;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 
 import javax.sql.DataSource;
 import java.net.URI;
 
 @Configuration
+@EnableCaching
 public class ApplicationConfig {
 
     private final Environment environment;
@@ -108,6 +112,14 @@ public class ApplicationConfig {
         builder.driverClassName(environment.getProperty("spring.datasource.driverClassName", "org.postgresql.Driver"));
 
         return builder.build();
+    }
+
+    @Bean
+    public CacheManager cacheManager() {
+        // Use in-memory cache for simplicity - can be upgraded to Redis later
+        ConcurrentMapCacheManager cacheManager = new ConcurrentMapCacheManager();
+        cacheManager.setAllowNullValues(false); // Don't cache null values
+        return cacheManager;
     }
 
     @EventListener

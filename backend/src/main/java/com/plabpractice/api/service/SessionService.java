@@ -666,25 +666,20 @@ public class SessionService {
     }
 
     public Case getRandomCase(List<String> topics) {
-        if (topics.isEmpty() || topics.contains("Random")) {
-            // Get total count of cases
-            long totalCases = caseRepository.count();
-            if (totalCases == 0) {
+        if (topics == null || topics.isEmpty() || topics.contains("Random")) {
+            // Use optimized native query instead of loading all cases
+            Case randomCase = caseRepository.findRandomCase();
+            if (randomCase == null) {
                 throw new RuntimeException("No cases available");
             }
-
-            // Get a random case
-            long randomId = new Random().nextLong(totalCases);
-            return caseRepository.findAll().get((int) randomId);
+            return randomCase;
         } else {
-            // Get cases by topics
-            List<Case> cases = caseRepository.findByAnyTopicIn(topics);
-            if (cases.isEmpty()) {
+            // Use optimized query for category-based selection
+            Case randomCase = caseRepository.findRandomCaseByCategoryNames(topics);
+            if (randomCase == null) {
                 throw new RuntimeException("No cases available for selected topics");
             }
-
-            // Get a random case from the filtered list
-            return cases.get(new Random().nextInt(cases.size()));
+            return randomCase;
         }
     }
 
@@ -698,5 +693,97 @@ public class SessionService {
             participant.setHasGivenFeedback(false);
             sessionParticipantRepository.save(participant);
         }
+    }
+
+    // NEW: Optimized version of getUserSessions - prevents N+1 query problem
+    public List<Session> getUserSessionsOptimized(Long userId) {
+        List<SessionParticipant> participations = sessionParticipantRepository.findByUserIdWithSessions(userId);
+        return participations.stream()
+                .map(SessionParticipant::getSession)
+                .toList();
+    }
+
+    // NEW: Optimized version using the new repository method
+    public List<Session> getUserSessionsOptimized(User user) {
+        return getUserSessionsOptimized(user.getId());
+    }
+
+    // NEW: Optimized random case selection - no longer loads all cases into memory
+    public Case getRandomCaseOptimized(List<String> topics) {
+        if (topics == null || topics.isEmpty() || topics.contains("Random")) {
+            // Use optimized native query instead of loading all cases
+            return caseRepository.findRandomCase();
+        } else {
+            // Use optimized query for category-based selection
+            return caseRepository.findRandomCaseByCategoryNames(topics);
+        }
+    }
+
+    // NEW: Optimized active sessions fetching
+    public List<Session> getActiveSessionsOptimized() {
+        // For simple lists, we can use the projection to avoid loading heavy data
+        List<Object[]> projections = sessionRepository.findActiveSessionProjections();
+        return projections.stream()
+                .map(this::mapProjectionToSession)
+                .toList();
+    }
+
+    // NEW: Helper method to map projection to Session entity
+    private Session mapProjectionToSession(Object[] projection) {
+        Session session = new Session();
+        session.setId((Long) projection[0]);
+        session.setTitle((String) projection[1]);
+        session.setCode((String) projection[2]);
+        session.setStatus((Session.Status) projection[3]);
+        session.setPhase((Session.Phase) projection[4]);
+        session.setCreatedAt((LocalDateTime) projection[5]);
+        session.setStartTime((LocalDateTime) projection[6]);
+        return session;
+    }
+
+    // NEW: Optimized session participant DTOs with reduced queries
+    @Transactional(readOnly = true)
+    public List<SessionParticipantDTO> getSessionParticipantDTOsOptimized(Long sessionId) {
+        // Use the optimized query that already includes users
+        List<SessionParticipant> activeParticipants = sessionParticipantRepository
+                .findBySessionIdAndIsActiveWithUser(sessionId, true);
+
+        return activeParticipants.stream()
+                .map(participant -> {
+                    SessionParticipantDTO dto = new SessionParticipantDTO();
+                    dto.setId(participant.getId());
+                    dto.setRole(participant.getRole());
+                    // User is already eagerly loaded via JOIN FETCH, no additional query needed
+                    if (participant.getUser() != null) {
+                        UserDTO userDTO = new UserDTO();
+                        userDTO.setId(participant.getUser().getId());
+                        userDTO.setName(participant.getUser().getName());
+                        userDTO.setEmail(participant.getUser().getEmail());
+                        userDTO.setRole(participant.getUser().getRole());
+                        dto.setUser(userDTO);
+                    }
+                    return dto;
+                })
+                .toList();
+    }
+
+    // NEW: Optimized method for getting session with case information
+    public Optional<Session> findSessionByCodeWithCase(String code) {
+        return sessionRepository.findByCodeWithCase(code);
+    }
+
+    // NEW: Optimized method for getting session with creator information
+    public Optional<Session> findSessionByCodeWithCreator(String code) {
+        return sessionRepository.findByCodeWithCreator(code);
+    }
+
+    // NEW: Optimized case selection for recall sessions
+    public Case getRandomRecallCaseOptimized(String startDate, String endDate, List<Long> excludeIds) {
+        return caseRepository.findRandomRecallCaseInDateRange(startDate, endDate, excludeIds);
+    }
+
+    // NEW: Count active sessions without loading data
+    public long countActiveSessions() {
+        return sessionRepository.countActiveSessions();
     }
 }
