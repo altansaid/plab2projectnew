@@ -179,10 +179,7 @@ const Login: React.FC = () => {
       setIsGoogleLoading(true);
       setError("");
 
-      console.log(
-        "Google credential received:",
-        response.credential.substring(0, 50) + "..."
-      );
+      // Google credential received - processing securely (credential not logged for security)
 
       const result = await api.post("/auth/google", {
         idToken: response.credential,

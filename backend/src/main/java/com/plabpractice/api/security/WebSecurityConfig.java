@@ -68,6 +68,7 @@ public class WebSecurityConfig {
                             .requestMatchers("/api/upload/**").permitAll()
                             .requestMatchers("/api/uploads/**").permitAll()
                             .requestMatchers("/ws/**").permitAll()
+                            .requestMatchers("/ping").permitAll()
                             .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                             .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll();
 

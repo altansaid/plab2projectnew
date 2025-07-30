@@ -31,7 +31,7 @@ public class GoogleTokenVerifier {
         if (!googleOAuthEnabled) {
             // Mock verification for development
             logger.info("=== MOCK GOOGLE TOKEN VERIFICATION (OAuth disabled) ===");
-            logger.info("Token: {}", idTokenString.substring(0, Math.min(20, idTokenString.length())) + "...");
+            logger.info("Processing Google token for development (token details not logged for security)");
             logger.info("=== END MOCK VERIFICATION ===");
 
             Map<String, Object> mockPayload = new HashMap<>();
@@ -63,7 +63,7 @@ public class GoogleTokenVerifier {
 
             // Fallback: Verify token using Google's tokeninfo endpoint
             String url = GOOGLE_TOKENINFO_URL + idTokenString;
-            logger.info("Verifying Google token with URL: {}", url);
+            logger.info("Verifying Google token with tokeninfo endpoint (URL not logged for security)");
             @SuppressWarnings("unchecked")
             Map<String, Object> response = restTemplate.getForObject(url, Map.class);
 
