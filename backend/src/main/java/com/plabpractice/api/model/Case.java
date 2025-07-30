@@ -3,6 +3,7 @@ package com.plabpractice.api.model;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import java.util.List;
@@ -91,6 +92,7 @@ public class Case {
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "case_topics", joinColumns = @JoinColumn(name = "case_id"))
     @Column(name = "topic")
+    @JsonIgnore
     private List<String> topics;
 
     // Case-specific feedback criteria
