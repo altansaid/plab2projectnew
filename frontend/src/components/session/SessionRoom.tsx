@@ -1125,8 +1125,26 @@ const SessionRoomMain: React.FC = () => {
   const [persistentIsSubmitting, setPersistentIsSubmitting] = useState(false);
   const [persistentHasSubmitted, setPersistentHasSubmitted] = useState(false);
 
-  // Track current round for feedback state reset
+  // Track current round and case for feedback state reset
   const [currentRound, setCurrentRound] = useState<number>(1);
+  const [currentCaseId, setCurrentCaseId] = useState<string | null>(null);
+  const [prevPhaseForReset, setPrevPhaseForReset] = useState<string>("");
+
+  // Helper function to reset feedback state
+  const resetFeedbackState = useCallback(() => {
+    // Force immediate state updates
+    setPersistentHasSubmitted(false);
+    setPersistentIsSubmitting(false);
+    setPersistentFeedbackState({
+      criteriaScores: [],
+      additionalComments: "",
+    });
+
+    // Additional safety: Force re-render after a small delay
+    setTimeout(() => {
+      setPersistentHasSubmitted(false);
+    }, 10);
+  }, [persistentHasSubmitted]);
 
   // Reset feedback state when new round starts
   useEffect(() => {
@@ -1134,17 +1152,36 @@ const SessionRoomMain: React.FC = () => {
       sessionData?.currentRound &&
       sessionData.currentRound !== currentRound
     ) {
-      // Reset feedback state for new round
-      setPersistentFeedbackState({
-        criteriaScores: [],
-        additionalComments: "",
-      });
-      setPersistentHasSubmitted(false);
-      setPersistentIsSubmitting(false);
-
+      resetFeedbackState();
       setCurrentRound(sessionData.currentRound);
     }
-  }, [sessionData?.currentRound, currentRound]);
+  }, [sessionData?.currentRound, currentRound, resetFeedbackState]);
+
+  // Reset feedback state when case changes (backup mechanism)
+  useEffect(() => {
+    const newCaseId = sessionData?.selectedCase?.id;
+    if (newCaseId && newCaseId !== currentCaseId && currentCaseId !== null) {
+      resetFeedbackState();
+    }
+    if (newCaseId) {
+      setCurrentCaseId(newCaseId);
+    }
+  }, [sessionData?.selectedCase?.id, currentCaseId, resetFeedbackState]);
+
+  // Reset feedback state when phase changes to READING (indicating new case start)
+  useEffect(() => {
+    const currentPhase = sessionData?.phase;
+    if (
+      currentPhase === "reading" &&
+      prevPhaseForReset !== "reading" &&
+      prevPhaseForReset !== ""
+    ) {
+      resetFeedbackState();
+    }
+    if (currentPhase) {
+      setPrevPhaseForReset(currentPhase);
+    }
+  }, [sessionData?.phase, prevPhaseForReset, resetFeedbackState]);
 
   // Initialize feedback criteria scores when session data loads
   useEffect(() => {
@@ -1273,6 +1310,15 @@ const SessionRoomMain: React.FC = () => {
         // Handle the flow based on startNewCase flag
         if (startNewCase) {
           // Stay in session to see the new case (for all roles)
+          // Reset feedback state after a short delay for new case
+          setTimeout(() => {
+            setPersistentHasSubmitted(false);
+            setPersistentIsSubmitting(false);
+            setPersistentFeedbackState({
+              criteriaScores: [],
+              additionalComments: "",
+            });
+          }, 500); // Wait a bit for backend to process
 
           return;
         }
@@ -1344,6 +1390,15 @@ const SessionRoomMain: React.FC = () => {
       setPersistentHasSubmitted(true);
 
       // Stay in session to see the new case with swapped roles
+      // Reset feedback state after a short delay for new case with role change
+      setTimeout(() => {
+        setPersistentHasSubmitted(false);
+        setPersistentIsSubmitting(false);
+        setPersistentFeedbackState({
+          criteriaScores: [],
+          additionalComments: "",
+        });
+      }, 500); // Wait a bit for backend to process
     } catch (error) {
       // Handle feedback submission error
     } finally {
@@ -1726,6 +1781,25 @@ const SessionRoomMain: React.FC = () => {
               setSessionData((prev) => {
                 if (!prev) return null;
 
+                // Check for new case and reset feedback immediately
+                const isNewCase =
+                  data.selectedCase &&
+                  data.selectedCase.id !== prev.selectedCase?.id;
+                const isNewRound =
+                  data.currentRound && data.currentRound !== prev.currentRound;
+
+                if (isNewCase || isNewRound) {
+                  // Immediate feedback state reset
+                  setTimeout(() => {
+                    setPersistentHasSubmitted(false);
+                    setPersistentIsSubmitting(false);
+                    setPersistentFeedbackState({
+                      criteriaScores: [],
+                      additionalComments: "",
+                    });
+                  }, 0);
+                }
+
                 // Check if the current user's role has changed
                 const currentUserId = user?.id;
                 if (currentUserId && data.participants && prev.participants) {
@@ -1771,6 +1845,16 @@ const SessionRoomMain: React.FC = () => {
               // Always close if phase is READING (don't rely on stale state value)
               if (data.phase === "READING") {
                 setShowTopicSelectionDialog(false);
+
+                // Reset feedback when reading phase starts (new case)
+                setTimeout(() => {
+                  setPersistentHasSubmitted(false);
+                  setPersistentIsSubmitting(false);
+                  setPersistentFeedbackState({
+                    criteriaScores: [],
+                    additionalComments: "",
+                  });
+                }, 0);
               }
 
               // Force a re-render by creating a new object
