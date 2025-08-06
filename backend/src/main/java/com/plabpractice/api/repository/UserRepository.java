@@ -20,6 +20,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
         Optional<User> findByGoogleId(String googleId);
 
+        Optional<User> findBySupabaseId(String supabaseId);
+
         Optional<User> findByResetToken(String resetToken);
 
         // Admin user management queries

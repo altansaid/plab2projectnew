@@ -27,6 +27,7 @@ import java.util.Arrays;
 public class WebSecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final SupabaseJwtAuthenticationFilter supabaseJwtAuthenticationFilter;
     private final CustomUserDetailsService userDetailsService;
 
     @Value("${cors.allowed-origins}")
@@ -36,8 +37,10 @@ public class WebSecurityConfig {
     private boolean h2ConsoleEnabled;
 
     public WebSecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
+            SupabaseJwtAuthenticationFilter supabaseJwtAuthenticationFilter,
             CustomUserDetailsService userDetailsService) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.supabaseJwtAuthenticationFilter = supabaseJwtAuthenticationFilter;
         this.userDetailsService = userDetailsService;
     }
 
@@ -79,7 +82,8 @@ public class WebSecurityConfig {
                     auth.anyRequest().authenticated();
                 })
                 .authenticationProvider(authenticationProvider())
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(supabaseJwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(jwtAuthenticationFilter, SupabaseJwtAuthenticationFilter.class)
                 .headers(headers -> {
                     headers.frameOptions().deny();
                     headers.contentTypeOptions();

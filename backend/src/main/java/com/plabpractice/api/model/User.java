@@ -47,6 +47,10 @@ public class User {
     @Column(name = "google_id")
     private String googleId;
 
+    // Supabase fields
+    @Column(name = "supabase_id")
+    private String supabaseId;
+
     @Column(name = "provider")
     @Enumerated(EnumType.STRING)
     private AuthProvider provider = AuthProvider.LOCAL;
@@ -70,7 +74,8 @@ public class User {
 
     public enum AuthProvider {
         LOCAL,
-        GOOGLE
+        GOOGLE,
+        SUPABASE
     }
 
     // Helper methods for reset token
