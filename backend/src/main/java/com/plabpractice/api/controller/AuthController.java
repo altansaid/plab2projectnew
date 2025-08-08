@@ -177,6 +177,9 @@ public class AuthController {
         }
     }
 
+    @org.springframework.beans.factory.annotation.Value("${auth.reset-token.minutes:15}")
+    private int resetTokenMinutes;
+
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         try {
@@ -186,7 +189,7 @@ public class AuthController {
                 // Generate reset token
                 String resetToken = UUID.randomUUID().toString();
                 user.setResetToken(resetToken);
-                user.setResetTokenExpiry(LocalDateTime.now().plusHours(24)); // 24 hours expiry
+                user.setResetTokenExpiry(LocalDateTime.now().plusMinutes(resetTokenMinutes));
                 userRepository.save(user);
 
                 // Send reset email
@@ -209,9 +212,15 @@ public class AuthController {
         try {
             User user = userRepository.findByResetToken(request.getToken()).orElse(null);
 
-            if (user == null || !user.isResetTokenValid()) {
+            if (user == null) {
                 Map<String, Object> errorResponse = new HashMap<>();
-                errorResponse.put("error", "Invalid or expired reset token");
+                errorResponse.put("error", "Invalid reset token");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            if (!user.isResetTokenValid()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Reset token has expired. Please request a new one.");
                 return ResponseEntity.badRequest().body(errorResponse);
             }
 

@@ -103,7 +103,7 @@ public class EmailService {
                         "You have requested to reset your password for the PLAB Practice Platform.\n\n" +
                         "Please click the following link to reset your password:\n" +
                         "%s/reset-password?token=%s\n\n" +
-                        "This link will expire in 24 hours.\n\n" +
+                        "This link will expire in 15 minutes.\n\n" +
                         "If you didn't request this password reset, please ignore this email.\n\n" +
                         "Best regards,\n" +
                         "PLAB Practice Platform Team",
@@ -122,7 +122,7 @@ public class EmailService {
         sb.append("<p>If the button doesn't work, copy and paste this link into your browser:</p>");
         sb.append(String.format("<p><a href=\"%s\">%s</a></p>", resetLink, resetLink));
         sb.append(
-                "<p style=\"color:#555; font-size: 13px;\">This link will expire in 24 hours. If you didn't request this password reset, you can safely ignore this email.</p>");
+                "<p style=\"color:#555; font-size: 13px;\">This link will expire in 15 minutes. If you didn't request this password reset, you can safely ignore this email.</p>");
         sb.append("<p>Best regards,<br/>PLAB Practice Platform Team</p>");
         sb.append("</div>");
         return sb.toString();
