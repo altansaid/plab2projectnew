@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { Client } from '@stomp/stompjs';
 import { store } from '../store';
+import { logout } from '../features/auth/authSlice';
 
 // Environment-based API URLs
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
@@ -36,6 +37,15 @@ api.interceptors.response.use(
     return response;
   },
       (error) => {
+      const status = error?.response?.status;
+      if (status === 401) {
+        try {
+          store.dispatch(logout());
+        } catch {}
+        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+      }
       return Promise.reject(error);
     }
 );

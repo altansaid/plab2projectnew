@@ -1,6 +1,45 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { User } from '../../types';
 
+interface DecodedJwtPayload {
+  exp?: number;
+  [key: string]: any;
+}
+
+const base64UrlDecode = (base64Url: string): string => {
+  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64.padEnd(base64.length + (4 - (base64.length % 4)) % 4, '=');
+  try {
+    // Decode and handle UTF-8 properly
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+    const decoder = new TextDecoder('utf-8');
+    return decoder.decode(bytes);
+  } catch {
+    return '';
+  }
+};
+
+const getJwtExpirationMs = (token: string): number | null => {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payloadJson = base64UrlDecode(parts[1]);
+    if (!payloadJson) return null;
+    const payload: DecodedJwtPayload = JSON.parse(payloadJson);
+    if (typeof payload.exp !== 'number') return null;
+    return payload.exp * 1000; // exp is in seconds
+  } catch {
+    return null;
+  }
+};
+
+const isTokenExpired = (token: string): boolean => {
+  const expMs = getJwtExpirationMs(token);
+  if (!expMs) return true; // Treat undecodable/invalid tokens as expired
+  return Date.now() >= expMs;
+};
+
 interface AuthState {
   user: User | null;
   token: string | null;
@@ -17,14 +56,20 @@ const initializeState = (): AuthState => {
   // Check if token exists and is not expired (basic validation)
   if (token && userStr) {
     try {
-      const user = JSON.parse(userStr);
-      return {
-        user,
-        token,
-        isLoading: false,
-        error: null,
-        isAuthenticated: true,
-      };
+      if (isTokenExpired(token)) {
+        // Token expired → force logout state
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      } else {
+        const user = JSON.parse(userStr);
+        return {
+          user,
+          token,
+          isLoading: false,
+          error: null,
+          isAuthenticated: true,
+        };
+      }
     } catch (error) {
       // Clear invalid data
       localStorage.removeItem('token');
