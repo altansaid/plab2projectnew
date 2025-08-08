@@ -37,7 +37,7 @@ public class EmailService {
 
     public void sendPasswordResetEmail(String toEmail, String resetToken) {
         try {
-            String subject = "Password Reset Request - PLAB Practice Platform";
+            String subject = "Password Reset Request - PLAB 2 Practice";
             String resetLink = String.format("%s/reset-password?token=%s", frontendUrl, resetToken);
             String textBody = buildPasswordResetMessage(resetToken);
             String htmlBody = buildPasswordResetHtml(resetLink);
@@ -114,7 +114,8 @@ public class EmailService {
         StringBuilder sb = new StringBuilder();
         sb.append("<div style=\"font-family: Arial, sans-serif; line-height: 1.5; color: #222;\">");
         sb.append("<p>Hello,</p>");
-        sb.append("<p>You have requested to reset your password for the <strong>PLAB Practice Platform</strong>.</p>");
+        sb.append(
+                "<p>You have requested to reset your password for the <strong>PLAB 2 Practice</strong>.</p>");
         sb.append("<p>Please click the button below to reset your password:</p>");
         sb.append(String.format(
                 "<p><a href=\"%s\" style=\"display:inline-block;padding:10px 16px;background:#1976d2;color:#fff;text-decoration:none;border-radius:4px;\">Reset Password</a></p>",
@@ -123,7 +124,7 @@ public class EmailService {
         sb.append(String.format("<p><a href=\"%s\">%s</a></p>", resetLink, resetLink));
         sb.append(
                 "<p style=\"color:#555; font-size: 13px;\">This link will expire in 15 minutes. If you didn't request this password reset, you can safely ignore this email.</p>");
-        sb.append("<p>Best regards,<br/>PLAB Practice Platform Team</p>");
+        sb.append("<p>Best regards,<br/>PLAB Practice Team</p>");
         sb.append("</div>");
         return sb.toString();
     }
