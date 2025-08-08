@@ -16,6 +16,7 @@ import { useFormik } from "formik";
 import * as Yup from "yup";
 import { Link as RouterLink } from "react-router-dom";
 import { api } from "../../services/api";
+import { Helmet } from "react-helmet-async";
 
 const ForgotPassword: React.FC = () => {
   const [message, setMessage] = useState<string>("");
@@ -52,6 +53,14 @@ const ForgotPassword: React.FC = () => {
 
   return (
     <Container maxWidth="sm">
+      <Helmet>
+        <title>Forgot Password – PLAB 2 Practice</title>
+        <meta name="robots" content="noindex, nofollow" />
+        <link
+          rel="canonical"
+          href="https://plab2practice.com/forgot-password"
+        />
+      </Helmet>
       <Box
         sx={{
           mt: 8,

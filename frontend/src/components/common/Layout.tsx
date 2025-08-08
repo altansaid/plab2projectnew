@@ -25,6 +25,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { useNavigate, Link } from "react-router-dom";
 import { RootState } from "../../store";
 import { logout } from "../../features/auth/authSlice";
+import { Helmet } from "react-helmet-async";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -69,6 +70,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+      <Helmet>
+        <title>PLAB 2 Practice Platform</title>
+        <meta
+          name="description"
+          content="Practice PLAB 2 exam scenarios with real-time sessions, feedback, and analytics. Prepare effectively for PLAB 2 with our interactive platform."
+        />
+        <meta property="og:site_name" content="PLAB 2 Practice" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="robots" content="index, follow" />
+      </Helmet>
       <AppBar position="static">
         <Toolbar>
           <Typography

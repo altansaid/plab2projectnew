@@ -12,6 +12,7 @@ import {
   TrendingUp,
   ChevronRight,
 } from "lucide-react";
+import { Helmet } from "react-helmet-async";
 
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
@@ -43,6 +44,42 @@ const HomePage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Helmet>
+        <title>
+          PLAB 2 Practice – Online Practice Sessions, Cases, and Feedback
+        </title>
+        <meta
+          name="description"
+          content="Prepare for PLAB 2 with interactive practice sessions, real clinical cases, role-based scenarios, and detailed feedback. Build confidence and track progress."
+        />
+        <link rel="canonical" href="https://plab2practice.com/" />
+        <meta
+          property="og:title"
+          content="PLAB 2 Practice – Interactive Exam Preparation"
+        />
+        <meta
+          property="og:description"
+          content="Practice PLAB 2 cases with peers, role-play sessions, and get structured feedback."
+        />
+        <meta property="og:url" content="https://plab2practice.com/" />
+        <meta
+          property="og:image"
+          content="https://plab2practice.com/og-image.jpg"
+        />
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            name: "PLAB 2 Practice",
+            url: "https://plab2practice.com/",
+            potentialAction: {
+              "@type": "SearchAction",
+              target: "https://plab2practice.com/?q={search_term_string}",
+              "query-input": "required name=search_term_string",
+            },
+          })}
+        </script>
+      </Helmet>
       {/* Hero Section */}
       <section className="bg-gradient-to-br from-blue-50 to-indigo-100 py-12 sm:py-16 md:py-20">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">

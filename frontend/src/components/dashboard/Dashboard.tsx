@@ -37,6 +37,7 @@ import {
   getReceivedFeedback,
   getUserActiveSessions,
 } from "../../services/api";
+import { Helmet } from "react-helmet-async";
 
 interface ActiveSession {
   id: number;
@@ -161,6 +162,11 @@ const Dashboard: React.FC = () => {
 
   return (
     <Container maxWidth="lg">
+      <Helmet>
+        <title>Dashboard – PLAB 2 Practice</title>
+        <meta name="robots" content="noindex, nofollow" />
+        <link rel="canonical" href="https://plab2practice.com/dashboard" />
+      </Helmet>
       <Box sx={{ mt: 4, mb: 4 }}>
         <Grid container spacing={3} alignItems="center" sx={{ mb: 4 }}>
           <Grid item xs>

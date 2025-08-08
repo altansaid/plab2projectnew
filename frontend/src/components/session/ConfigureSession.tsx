@@ -34,6 +34,7 @@ import {
   configureSession,
   getAllRecallDates,
 } from "../../services/api";
+import { Helmet } from "react-helmet-async";
 
 interface SessionConfig {
   sessionType: "topic" | "recall";
@@ -271,6 +272,16 @@ const ConfigureSession: React.FC = () => {
 
   return (
     <Container maxWidth="lg">
+      <Helmet>
+        <title>Configure Session – PLAB 2 Practice</title>
+        <meta name="robots" content="noindex, nofollow" />
+        <link
+          rel="canonical"
+          href={`https://plab2practice.com/session/${
+            sessionCode || ""
+          }/configure`}
+        />
+      </Helmet>
       <Box sx={{ py: 4 }}>
         {/* Header */}
         <Box textAlign="center" mb={4}>

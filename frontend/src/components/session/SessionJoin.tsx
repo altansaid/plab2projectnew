@@ -10,6 +10,7 @@ import {
   Typography,
 } from "@mui/material";
 import { api } from "../../services/api";
+import { Helmet } from "react-helmet-async";
 
 const SessionJoin: React.FC = () => {
   const navigate = useNavigate();
@@ -30,6 +31,11 @@ const SessionJoin: React.FC = () => {
 
   return (
     <Container maxWidth="sm">
+      <Helmet>
+        <title>Join Session – PLAB 2 Practice</title>
+        <meta name="robots" content="noindex, nofollow" />
+        <link rel="canonical" href="https://plab2practice.com/session/join" />
+      </Helmet>
       <Box sx={{ mt: 4, mb: 4 }}>
         <Typography variant="h4" component="h1" gutterBottom>
           Join Session

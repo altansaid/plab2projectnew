@@ -23,6 +23,7 @@ import {
 import { RootState } from "../../store";
 import { SessionRole } from "../../features/session/sessionSlice";
 import { api } from "../../services/api";
+import { Helmet } from "react-helmet-async";
 
 interface RoleOption {
   id: SessionRole;
@@ -259,6 +260,14 @@ const RoleSelection: React.FC = () => {
 
   return (
     <Container maxWidth="lg">
+      <Helmet>
+        <title>Select Role – PLAB 2 Practice</title>
+        <meta name="robots" content="noindex, nofollow" />
+        <link
+          rel="canonical"
+          href={`https://plab2practice.com/session/${sessionCode || ""}/role`}
+        />
+      </Helmet>
       <Box sx={{ py: 4 }}>
         {/* Header */}
         <Box textAlign="center" mb={4}>

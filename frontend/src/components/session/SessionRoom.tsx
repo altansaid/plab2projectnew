@@ -96,6 +96,7 @@ import {
   endSession,
   getObserverFeedbackStatus,
 } from "../../services/api";
+import { Helmet } from "react-helmet-async";
 
 interface SessionData {
   sessionCode: string;
@@ -2473,6 +2474,14 @@ const SessionRoomMain: React.FC = () => {
 
   return (
     <Box sx={{ minHeight: "100vh", backgroundColor: "#f5f5f5" }}>
+      <Helmet>
+        <title>{`${sessionData.title || "Session"} – PLAB 2 Practice`}</title>
+        <meta name="robots" content="noindex, nofollow" />
+        <link
+          rel="canonical"
+          href={`https://plab2practice.com/session/${sessionData.sessionCode}/room`}
+        />
+      </Helmet>
       {/* Header */}
       <Paper elevation={1} sx={{ p: 2, mb: 0 }}>
         <Box

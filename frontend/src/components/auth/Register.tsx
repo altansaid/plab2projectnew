@@ -16,6 +16,7 @@ import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { api } from "../../services/api";
+import { Helmet } from "react-helmet-async";
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
@@ -69,6 +70,11 @@ const Register: React.FC = () => {
 
   return (
     <Container maxWidth="sm">
+      <Helmet>
+        <title>Create Account – PLAB 2 Practice</title>
+        <meta name="robots" content="noindex, follow" />
+        <link rel="canonical" href="https://plab2practice.com/register" />
+      </Helmet>
       <Box
         sx={{
           marginTop: 8,

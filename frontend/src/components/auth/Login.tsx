@@ -19,6 +19,7 @@ import { useDispatch } from "react-redux";
 import { loginSuccess } from "../../features/auth/authSlice";
 import { api } from "../../services/api";
 import GoogleSignInButton from "./GoogleSignInButton";
+import { Helmet } from "react-helmet-async";
 
 // Google Sign-In types
 declare global {
@@ -234,6 +235,11 @@ const Login: React.FC = () => {
 
   return (
     <Container maxWidth="sm">
+      <Helmet>
+        <title>Login – PLAB 2 Practice</title>
+        <meta name="robots" content="noindex, follow" />
+        <link rel="canonical" href="https://plab2practice.com/login" />
+      </Helmet>
       <Box
         sx={{
           marginTop: 8,

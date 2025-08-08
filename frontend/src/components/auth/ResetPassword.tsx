@@ -20,6 +20,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 import { api } from "../../services/api";
+import { Helmet } from "react-helmet-async";
 
 const ResetPassword: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -81,6 +82,14 @@ const ResetPassword: React.FC = () => {
   if (!token) {
     return (
       <Container maxWidth="sm">
+        <Helmet>
+          <title>Reset Password – PLAB 2 Practice</title>
+          <meta name="robots" content="noindex, nofollow" />
+          <link
+            rel="canonical"
+            href="https://plab2practice.com/reset-password"
+          />
+        </Helmet>
         <Box
           sx={{
             mt: 8,
@@ -113,6 +122,11 @@ const ResetPassword: React.FC = () => {
 
   return (
     <Container maxWidth="sm">
+      <Helmet>
+        <title>Reset Password – PLAB 2 Practice</title>
+        <meta name="robots" content="noindex, nofollow" />
+        <link rel="canonical" href="https://plab2practice.com/reset-password" />
+      </Helmet>
       <Box
         sx={{
           mt: 8,

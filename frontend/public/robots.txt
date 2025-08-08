@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+
+# Disallow sensitive/non-SEO routes
+Disallow: /login
+Disallow: /register
+Disallow: /dashboard
+Disallow: /profile
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /session/
+
+Sitemap: https://plab2practice.com/sitemap.xml
+

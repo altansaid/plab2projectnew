@@ -12,6 +12,7 @@ import {
   CircularProgress,
 } from "@mui/material";
 import { createSession } from "../../services/api";
+import { Helmet } from "react-helmet-async";
 
 const SessionCreateSimple: React.FC = () => {
   const navigate = useNavigate();
@@ -64,6 +65,11 @@ const SessionCreateSimple: React.FC = () => {
 
   return (
     <Container maxWidth="md">
+      <Helmet>
+        <title>Create Session – PLAB 2 Practice</title>
+        <meta name="robots" content="noindex, nofollow" />
+        <link rel="canonical" href="https://plab2practice.com/session/create" />
+      </Helmet>
       <Box sx={{ mt: 4, mb: 4 }}>
         <Typography variant="h4" component="h1" gutterBottom>
           Create New PLAB 2 Practice Session

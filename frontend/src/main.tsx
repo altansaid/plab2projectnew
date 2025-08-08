@@ -8,15 +8,18 @@ import { store } from "./store";
 import { theme } from "./utils/theme";
 import App from "./App";
 import "./index.css"; // Import Tailwind CSS styles
+import { HelmetProvider } from "react-helmet-async";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <Provider store={store}>
       <BrowserRouter>
-        <ThemeProvider theme={theme}>
-          <CssBaseline />
-          <App />
-        </ThemeProvider>
+        <HelmetProvider>
+          <ThemeProvider theme={theme}>
+            <CssBaseline />
+            <App />
+          </ThemeProvider>
+        </HelmetProvider>
       </BrowserRouter>
     </Provider>
   </React.StrictMode>
