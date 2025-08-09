@@ -1,18 +1,12 @@
 package com.plabpractice.api.controller;
 
+import com.plabpractice.api.service.SupabaseStorageService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/upload")
@@ -20,11 +14,16 @@ import java.util.UUID;
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:5173",
-        "https://plab2projectnew.vercel.app"
+        "https://plab2projectnew.vercel.app",
+        "https://plab2practice.com"
 })
 public class FileUploadController {
 
-    private final String UPLOAD_DIR = "uploads/images/";
+    private final SupabaseStorageService supabaseStorageService;
+
+    public FileUploadController(SupabaseStorageService supabaseStorageService) {
+        this.supabaseStorageService = supabaseStorageService;
+    }
 
     @PostMapping("/image")
     public ResponseEntity<Map<String, String>> uploadImage(@RequestParam("file") MultipartFile file) {
@@ -50,34 +49,18 @@ public class FileUploadController {
                 return ResponseEntity.badRequest().body(response);
             }
 
-            // Create upload directory if not exists
-            Path uploadPath = Paths.get(UPLOAD_DIR);
-            if (!Files.exists(uploadPath)) {
-                Files.createDirectories(uploadPath);
-            }
+            // Upload to Supabase and return the public/signed URL
+            String publicUrl = supabaseStorageService.uploadImageAndGetUrl(file);
 
-            // Generate unique filename
             String originalFilename = file.getOriginalFilename();
-            String fileExtension = "";
-            if (originalFilename != null && originalFilename.contains(".")) {
-                fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
+            response.put("url", publicUrl);
+            if (originalFilename != null) {
+                response.put("originalName", originalFilename);
             }
-
-            String uniqueFilename = UUID.randomUUID().toString() + fileExtension;
-            Path filePath = uploadPath.resolve(uniqueFilename);
-
-            // Save file
-            Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
-
-            // Return file URL (without /api prefix since frontend will add it)
-            String fileUrl = "/uploads/images/" + uniqueFilename;
-            response.put("url", fileUrl);
-            response.put("filename", uniqueFilename);
-            response.put("originalName", originalFilename);
 
             return ResponseEntity.ok(response);
 
-        } catch (IOException e) {
+        } catch (Exception e) {
             response.put("error", "Dosya yüklenirken hata oluştu: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
         }

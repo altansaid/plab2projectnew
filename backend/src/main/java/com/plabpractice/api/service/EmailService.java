@@ -66,7 +66,7 @@ public class EmailService {
 
             Map<String, Object> payload = new HashMap<>();
             // Use a branded from if possible (must be a verified sender in Resend)
-            payload.put("from", String.format("PLAB Practice <%s>", fromEmail));
+            payload.put("from", String.format("PLAB 2 Practice <%s>", fromEmail));
             payload.put("to", List.of(toEmail));
             payload.put("subject", subject);
             payload.put("text", textBody);
@@ -124,7 +124,7 @@ public class EmailService {
         sb.append(String.format("<p><a href=\"%s\">%s</a></p>", resetLink, resetLink));
         sb.append(
                 "<p style=\"color:#555; font-size: 13px;\">This link will expire in 15 minutes. If you didn't request this password reset, you can safely ignore this email.</p>");
-        sb.append("<p>Best regards,<br/>PLAB Practice Team</p>");
+        sb.append("<p>Best regards,<br/>PLAB 2 Practice Team</p>");
         sb.append("</div>");
         return sb.toString();
     }
