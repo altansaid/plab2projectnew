@@ -72,7 +72,18 @@ public class SupabaseStorageService {
             HttpHeaders headers = new HttpHeaders();
             headers.set("Authorization", "Bearer " + serviceKey);
             headers.set("apikey", serviceKey);
-            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+
+            // Determine correct image content type for Supabase (rejects octet-stream)
+            String detectedContentType = file.getContentType();
+            if (isBlank(detectedContentType) || !detectedContentType.startsWith("image/")) {
+                // Fallback by file extension
+                String fallback = mimeTypeFromExtension(fileExtension);
+                if (fallback == null) {
+                    throw new RestClientException("Unsupported or unknown image MIME type");
+                }
+                detectedContentType = fallback;
+            }
+            headers.setContentType(MediaType.parseMediaType(detectedContentType));
 
             HttpEntity<byte[]> requestEntity = new HttpEntity<>(file.getBytes(), headers);
             ResponseEntity<String> uploadResponse = restTemplate.exchange(uploadUrl, HttpMethod.POST, requestEntity,
@@ -145,5 +156,23 @@ public class SupabaseStorageService {
 
     private boolean isBlank(String s) {
         return s == null || s.trim().isEmpty();
+    }
+
+    private String mimeTypeFromExtension(String extensionWithDot) {
+        if (extensionWithDot == null) return null;
+        String ext = extensionWithDot.toLowerCase();
+        switch (ext) {
+            case ".jpg":
+            case ".jpeg":
+                return "image/jpeg";
+            case ".png":
+                return "image/png";
+            case ".gif":
+                return "image/gif";
+            case ".webp":
+                return "image/webp";
+            default:
+                return null;
+        }
     }
 }
