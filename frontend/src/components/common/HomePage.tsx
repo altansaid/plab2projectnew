@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { RootState } from "../../store";
 import {
-  Stethoscope,
   FileText,
   Clock,
   BarChart3,
@@ -266,8 +265,11 @@ const HomePage: React.FC = () => {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center space-x-2 mb-4 md:mb-0">
-              <Stethoscope className="h-6 w-6 text-blue-400" />
-              <span className="text-lg font-semibold">PLAB 2 Practice</span>
+              <img
+                src="/logo.png"
+                alt="PLAB 2 Practice"
+                className="h-6 w-auto"
+              />
             </div>
             <p className="text-gray-400 text-center md:text-right">
               © {new Date().getFullYear()} PLAB 2 Practice Platform. Helping

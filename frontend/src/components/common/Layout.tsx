@@ -8,14 +8,12 @@ import {
   Menu,
   MenuItem,
   Toolbar,
-  Typography,
   Avatar,
   Divider,
   ListItemIcon,
+  Typography,
 } from "@mui/material";
 import {
-  Menu as MenuIcon,
-  AccountCircle,
   Person,
   Logout,
   AdminPanelSettings,
@@ -81,99 +79,146 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="robots" content="index, follow" />
       </Helmet>
-      <AppBar position="static">
-        <Toolbar>
-          <Typography
-            variant="h6"
-            component={Link}
-            to="/"
-            sx={{
-              flexGrow: 1,
-              textDecoration: "none",
-              color: "inherit",
-              fontWeight: "bold",
-            }}
+      <AppBar
+        position="sticky"
+        elevation={0}
+        sx={{
+          bgcolor: "rgba(255,255,255,0.85)",
+          backdropFilter: "saturate(180%) blur(10px)",
+          WebkitBackdropFilter: "saturate(180%) blur(10px)",
+          color: "text.primary",
+          borderBottom: 1,
+          borderColor: "divider",
+        }}
+      >
+        <Container maxWidth={false} disableGutters>
+          <Toolbar
+            disableGutters
+            sx={{ minHeight: 64, px: { xs: 2, sm: 3, lg: 4 } }}
           >
-            PLAB 2 Practice Platform
-          </Typography>
+            <Box
+              component={Link}
+              to="/"
+              sx={{
+                flexGrow: 1,
+                display: "flex",
+                alignItems: "center",
+                textDecoration: "none",
+                color: "inherit",
+              }}
+            >
+              <Box
+                component="img"
+                src="/logo.png"
+                alt="PLAB 2 Practice"
+                sx={{ height: 40, width: "auto" }}
+              />
+            </Box>
 
-          {isAuthenticated ? (
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <Typography variant="body1" sx={{ mr: 2 }}>
-                Welcome, {user?.name}
-              </Typography>
+            {isAuthenticated ? (
+              <Box sx={{ display: "flex", alignItems: "center" }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    mr: 2,
+                    display: { xs: "none", sm: "block" },
+                    fontWeight: 500,
+                  }}
+                >
+                  Welcome, {user?.name}
+                </Typography>
 
-              <IconButton
-                size="large"
-                aria-label="account of current user"
-                aria-controls="menu-appbar"
-                aria-haspopup="true"
-                onClick={handleMenu}
-                color="inherit"
-              >
-                <Avatar sx={{ width: 32, height: 32 }}>
-                  {user?.name?.charAt(0).toUpperCase()}
-                </Avatar>
-              </IconButton>
+                <IconButton
+                  size="large"
+                  aria-label="account of current user"
+                  aria-controls="menu-appbar"
+                  aria-haspopup="true"
+                  onClick={handleMenu}
+                  color="inherit"
+                >
+                  <Avatar
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      boxShadow: 1,
+                      bgcolor: "primary.main",
+                      color: "primary.contrastText",
+                    }}
+                  >
+                    {user?.name?.charAt(0).toUpperCase()}
+                  </Avatar>
+                </IconButton>
 
-              <Menu
-                id="menu-appbar"
-                anchorEl={anchorEl}
-                anchorOrigin={{
-                  vertical: "bottom",
-                  horizontal: "right",
-                }}
-                keepMounted
-                transformOrigin={{
-                  vertical: "top",
-                  horizontal: "right",
-                }}
-                open={Boolean(anchorEl)}
-                onClose={handleClose}
-              >
-                {user?.role === "ADMIN" && (
-                  <MenuItem onClick={handleAdmin}>
+                <Menu
+                  id="menu-appbar"
+                  anchorEl={anchorEl}
+                  anchorOrigin={{
+                    vertical: "bottom",
+                    horizontal: "right",
+                  }}
+                  keepMounted
+                  transformOrigin={{
+                    vertical: "top",
+                    horizontal: "right",
+                  }}
+                  open={Boolean(anchorEl)}
+                  onClose={handleClose}
+                >
+                  {user?.role === "ADMIN" && (
+                    <MenuItem onClick={handleAdmin}>
+                      <ListItemIcon>
+                        <AdminPanelSettings />
+                      </ListItemIcon>
+                      Admin Panel
+                    </MenuItem>
+                  )}
+                  <MenuItem onClick={handleDashboard}>
                     <ListItemIcon>
-                      <AdminPanelSettings />
+                      <DashboardIcon />
                     </ListItemIcon>
-                    Admin Panel
+                    Dashboard
                   </MenuItem>
-                )}
-                <MenuItem onClick={handleDashboard}>
-                  <ListItemIcon>
-                    <DashboardIcon />
-                  </ListItemIcon>
-                  Dashboard
-                </MenuItem>
 
-                <MenuItem onClick={handleProfile}>
-                  <ListItemIcon>
-                    <Person />
-                  </ListItemIcon>
-                  My Profile
-                </MenuItem>
+                  <MenuItem onClick={handleProfile}>
+                    <ListItemIcon>
+                      <Person />
+                    </ListItemIcon>
+                    My Profile
+                  </MenuItem>
 
-                <Divider />
+                  <Divider />
 
-                <MenuItem onClick={handleLogout}>
-                  <ListItemIcon>
-                    <Logout />
-                  </ListItemIcon>
-                  Logout
-                </MenuItem>
-              </Menu>
-            </Box>
-          ) : (
-            <Box>
-              <Button color="inherit" component={Link} to="/login">
-                Login
-              </Button>
-              <Button color="inherit" component={Link} to="/register">
-                Register
-              </Button>
-            </Box>
-          )}
-        </Toolbar>
+                  <MenuItem onClick={handleLogout}>
+                    <ListItemIcon>
+                      <Logout />
+                    </ListItemIcon>
+                    Logout
+                  </MenuItem>
+                </Menu>
+              </Box>
+            ) : (
+              <Box>
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  component={Link}
+                  to="/login"
+                  sx={{ mr: 1 }}
+                >
+                  Login
+                </Button>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  component={Link}
+                  to="/register"
+                >
+                  Register
+                </Button>
+              </Box>
+            )}
+          </Toolbar>
+        </Container>
       </AppBar>
 
       <Box component="main" sx={{ flexGrow: 1 }}>
