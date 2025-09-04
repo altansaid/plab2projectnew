@@ -19,7 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -296,10 +295,20 @@ public class SessionService {
 
         // Update session configuration
         if (config.containsKey("readingTime")) {
-            session.setReadingTime((Integer) config.get("readingTime"));
+            Object readingTimeObj = config.get("readingTime");
+            if (readingTimeObj instanceof Number) {
+                // Accept Double/Integer seamlessly; round to nearest minute since backend
+                // stores minutes
+                int readingMinutes = (int) Math.round(((Number) readingTimeObj).doubleValue());
+                session.setReadingTime(readingMinutes);
+            }
         }
         if (config.containsKey("consultationTime")) {
-            session.setConsultationTime((Integer) config.get("consultationTime"));
+            Object consultationTimeObj = config.get("consultationTime");
+            if (consultationTimeObj instanceof Number) {
+                int consultationMinutes = (int) Math.round(((Number) consultationTimeObj).doubleValue());
+                session.setConsultationTime(consultationMinutes);
+            }
         }
         if (config.containsKey("timingType")) {
             session.setTimingType(Session.TimingType.valueOf((String) config.get("timingType")));

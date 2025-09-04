@@ -31,7 +31,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -77,8 +76,15 @@ public class SessionController {
             // Extract session configuration
             String title = (String) sessionData.getOrDefault("title", "PLAB 2 Practice Session");
             String sessionType = (String) sessionData.getOrDefault("sessionType", "TOPIC");
-            Integer readingTime = (Integer) sessionData.getOrDefault("readingTimeMinutes", 2);
-            Integer consultationTime = (Integer) sessionData.getOrDefault("consultationTimeMinutes", 8);
+            Object readingTimeObj = sessionData.getOrDefault("readingTimeMinutes", 2);
+            Object consultationTimeObj = sessionData.getOrDefault("consultationTimeMinutes", 8);
+
+            int readingTime = (readingTimeObj instanceof Number)
+                    ? (int) Math.round(((Number) readingTimeObj).doubleValue())
+                    : 2;
+            int consultationTime = (consultationTimeObj instanceof Number)
+                    ? (int) Math.round(((Number) consultationTimeObj).doubleValue())
+                    : 8;
             String timingType = (String) sessionData.getOrDefault("timingType", "COUNTDOWN");
             @SuppressWarnings("unchecked")
             List<String> selectedTopics = (List<String>) sessionData.getOrDefault("selectedTopics", List.of("Random"));
