@@ -57,8 +57,13 @@ public class ApplicationConfig {
                     password = credentials[1];
                 }
 
-                // Construct proper JDBC URL
+                // Construct proper JDBC URL and preserve query parameters (e.g.,
+                // sslmode=require)
                 jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s", host, port, database);
+                String query = uri.getQuery();
+                if (query != null && !query.isEmpty()) {
+                    jdbcUrl = jdbcUrl + "?" + query;
+                }
 
                 System.out.println("🔄 Parsed DATABASE_URL successfully:");
                 System.out.println("   Host: " + host);
