@@ -341,27 +341,15 @@ const Dashboard: React.FC = () => {
                           mb: 2,
                           border: "2px solid",
                           borderColor:
-                            getPerformancePercentage(
-                              item.overallPerformance,
-                              calculateMaxScore(item.criteriaScores)
-                            ) >= 80
+                            (item.overallPerformance ?? 0) >= 8.1
                               ? "success.main"
-                              : getPerformancePercentage(
-                                  item.overallPerformance,
-                                  calculateMaxScore(item.criteriaScores)
-                                ) >= 60
+                              : (item.overallPerformance ?? 0) >= 4.1
                               ? "warning.main"
                               : "error.main",
                           backgroundColor:
-                            getPerformancePercentage(
-                              item.overallPerformance,
-                              calculateMaxScore(item.criteriaScores)
-                            ) >= 80
+                            (item.overallPerformance ?? 0) >= 8.1
                               ? "success.50"
-                              : getPerformancePercentage(
-                                  item.overallPerformance,
-                                  calculateMaxScore(item.criteriaScores)
-                                ) >= 60
+                              : (item.overallPerformance ?? 0) >= 4.1
                               ? "warning.50"
                               : "error.50",
                         }}
