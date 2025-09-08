@@ -271,10 +271,20 @@ const HomePage: React.FC = () => {
                 className="h-6 w-auto"
               />
             </div>
+
             <p className="text-gray-400 text-center md:text-right">
               © {new Date().getFullYear()} PLAB 2 Practice Platform. Helping
               medical professionals achieve their UK practice goals.
             </p>
+
+            <a
+              href="https://buymeacoffee.com/plab2practice"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block bg-[#FFDD00] text-black font-semibold px-4 py-2 rounded-md mb-4 md:mb-0"
+            >
+              Buy me a coffee
+            </a>
           </div>
         </div>
       </footer>
