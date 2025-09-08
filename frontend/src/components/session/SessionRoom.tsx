@@ -1059,7 +1059,7 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({
                     onClick={() => setShowContentModal(true)}
                     sx={{ py: 1.5, mb: 1 }}
                   >
-                    View Patient Content
+                    Examination Findings
                   </Button>
                 )}
                 {userRole === "doctor" && (
@@ -2233,7 +2233,7 @@ const SessionRoomMain: React.FC = () => {
                     onClick={() => setShowContentModal(true)}
                     sx={{ py: 1.5 }}
                   >
-                    View Patient Content
+                    Examination Findings
                   </Button>
                 )}
                 <Button
