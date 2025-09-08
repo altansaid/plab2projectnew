@@ -77,6 +77,7 @@ import {
   VolumeUp as AudioIcon,
   PlayArrow as PlayIcon,
   Pause as PauseIcon,
+  VolumeOff as MuteIcon,
   Image as ImageIcon,
   Close as CloseIcon,
 } from "@mui/icons-material";
@@ -752,7 +753,7 @@ const StableFeedbackComponent = ({
                 disabled={!isComplete() || isSubmitting}
                 size="large"
               >
-                {isSubmitting ? "Submitting..." : "Submit Feedback"}
+                {isSubmitting ? "Submitting..." : "Submit Feedback & Close"}
               </Button>
               {userRole !== "observer" && (
                 <Button
@@ -1117,6 +1118,38 @@ const SessionRoomMain: React.FC = () => {
     "newCase" | "roleChange" | null
   >(null);
 
+  // Global audio mute toggle and audio elements
+  const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
+  const audioEnterRef = useRef<HTMLAudioElement | null>(null);
+  const audioTwoMinRef = useRef<HTMLAudioElement | null>(null);
+  const audioMoveOnRef = useRef<HTMLAudioElement | null>(null);
+  const audioBeginRef = useRef<HTMLAudioElement | null>(null);
+  const twoMinPlayedForConsultation = useRef<boolean>(false);
+
+  // Preload audio elements on mount
+  useEffect(() => {
+    audioEnterRef.current = new Audio("/enterroom.mp3");
+    audioTwoMinRef.current = new Audio("/2min.mp3");
+    audioMoveOnRef.current = new Audio("/moveon.mp3");
+    audioBeginRef.current = new Audio("/Begin1.mp3");
+  }, []);
+
+  const playSound = useCallback(
+    (audioRef: React.MutableRefObject<HTMLAudioElement | null>) => {
+      if (!audioEnabled) return;
+      const audio = audioRef.current;
+      if (!audio) return;
+      try {
+        audio.currentTime = 0;
+        const p = audio.play();
+        if (p && typeof p.then === "function") {
+          p.catch(() => {});
+        }
+      } catch (_) {}
+    },
+    [audioEnabled]
+  );
+
   // PERSISTENT FEEDBACK STATE - managed here to prevent loss during phase transitions
   const [persistentFeedbackState, setPersistentFeedbackState] =
     useState<FeedbackState>({
@@ -1310,6 +1343,10 @@ const SessionRoomMain: React.FC = () => {
 
         // Handle the flow based on startNewCase flag
         if (startNewCase) {
+          // If patient triggered new case, play Begin sound
+          if (userRole === "patient") {
+            playSound(audioBeginRef);
+          }
           // Stay in session to see the new case (for all roles)
           // Reset feedback state after a short delay for new case
           setTimeout(() => {
@@ -1342,6 +1379,7 @@ const SessionRoomMain: React.FC = () => {
       sessionCode,
       navigate,
       userRole,
+      playSound,
     ]
   );
 
@@ -1390,6 +1428,11 @@ const SessionRoomMain: React.FC = () => {
 
       setPersistentHasSubmitted(true);
 
+      // Patient pressed Submit & Role Change, play Begin sound
+      if (userRole === "patient") {
+        playSound(audioBeginRef);
+      }
+
       // Stay in session to see the new case with swapped roles
       // Reset feedback state after a short delay for new case with role change
       setTimeout(() => {
@@ -1410,6 +1453,8 @@ const SessionRoomMain: React.FC = () => {
     persistentHasSubmitted,
     persistentFeedbackState,
     sessionCode,
+    userRole,
+    playSound,
   ]);
 
   // OBSERVER FEEDBACK VALIDATION FUNCTIONS
@@ -1530,12 +1575,45 @@ const SessionRoomMain: React.FC = () => {
   const hasUnloaded = useRef(false);
   const previousPhase = useRef<string>("");
 
-  // Track phase changes
+  // Handle phase transitions: reading -> consultation (enter), consultation -> feedback (move on)
   useEffect(() => {
-    if (sessionData?.phase) {
-      previousPhase.current = sessionData.phase;
+    if (!sessionData) return;
+    const currentPhase = sessionData.phase;
+    const previous = previousPhase.current;
+    if (previous !== "consultation" && currentPhase === "consultation") {
+      playSound(audioEnterRef);
+      twoMinPlayedForConsultation.current = false;
     }
-  }, [sessionData?.phase]);
+    if (previous === "consultation" && currentPhase === "feedback") {
+      playSound(audioMoveOnRef);
+    }
+    previousPhase.current = currentPhase;
+  }, [sessionData?.phase, playSound]);
+
+  // 2-minute remaining alert during consultation
+  useEffect(() => {
+    if (!sessionData || sessionData.phase !== "consultation") return;
+    let interval: any = null;
+    const tick = () => {
+      const remaining = clientTimer.getRemainingTime?.() ?? 0;
+      if (
+        typeof remaining === "number" &&
+        remaining <= 120 &&
+        !twoMinPlayedForConsultation.current
+      ) {
+        twoMinPlayedForConsultation.current = true;
+        playSound(audioTwoMinRef);
+      }
+    };
+    // Run immediately and then every second
+    try {
+      tick();
+    } catch (_) {}
+    interval = setInterval(tick, 1000);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [sessionData?.phase, clientTimer, playSound]);
 
   // Essential session handlers (restored after refactor)
   const handleStartSession = useCallback(async () => {
@@ -1627,7 +1705,7 @@ const SessionRoomMain: React.FC = () => {
       // Reset button loading state
       setButtonStates((prev) => ({ ...prev, giveFeedback: false }));
     }
-  }, [sessionData, clientTimer]);
+  }, [sessionData, clientTimer, playSound]);
 
   const handleSubmitFeedback = useCallback(async () => {
     // This is a placeholder - the actual feedback submission is handled by IndependentFeedbackComponent
@@ -2526,6 +2604,12 @@ const SessionRoomMain: React.FC = () => {
           </AvatarGroup>
 
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <IconButton
+              aria-label={audioEnabled ? "Mute sounds" : "Unmute sounds"}
+              onClick={() => setAudioEnabled((v) => !v)}
+            >
+              {audioEnabled ? <AudioIcon /> : <MuteIcon />}
+            </IconButton>
             <Button
               variant="contained"
               color="error"

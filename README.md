@@ -392,10 +392,9 @@ docker-compose down
 
 - **Live URL**: https://plab2projectnew.vercel.app/
 - **Environment Variables**:
+
   ```bash
-  VITE_API_URL=https://plab2project-backend.onrender.com/api
-  VITE_WS_URL=https://plab2project-backend.onrender.com/ws
-  VITE_GOOGLE_CLIENT_ID=your_google_oauth_client_id
+
   ```
 
 #### **Backend (Render)**

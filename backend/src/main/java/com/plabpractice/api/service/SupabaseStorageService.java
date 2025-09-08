@@ -159,7 +159,8 @@ public class SupabaseStorageService {
     }
 
     private String mimeTypeFromExtension(String extensionWithDot) {
-        if (extensionWithDot == null) return null;
+        if (extensionWithDot == null)
+            return null;
         String ext = extensionWithDot.toLowerCase();
         switch (ext) {
             case ".jpg":
