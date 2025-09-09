@@ -91,6 +91,13 @@ const HomePage: React.FC = () => {
       <section className="pt-12 sm:pt-16 md:pt-20 pb-12 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 overflow-hidden">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-10 sm:mb-14">
+            {/* Badge */}
+            <div className="inline-flex items-center px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full border border-purple-400 mb-8 hover:shadow-md transition-all duration-300">
+              <Star className="h-4 w-4 text-yellow-500 mr-2" />
+              <span className="text-sm font-medium text-gray-700">
+                Trusted by PLAB 2 Candidates
+              </span>
+            </div>
             <h1 className="text-3xl sm:text-4xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
               Prepare for Your{" "}
               <span className="bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
@@ -235,7 +242,7 @@ const HomePage: React.FC = () => {
       <section className="py-8 sm:py-10 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 relative overflow-hidden">
         <div className="absolute inset-0 bg-black/10"></div>
         <div className="relative max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <p className="text-white text-base sm:text-lg lg:text-xl font-semibold text-center sm:text-left">
               Want to reach out? Use our contact form to ask questions, share
               ideas, or give feedback.
