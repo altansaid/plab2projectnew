@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { RootState } from "../../store";
@@ -12,6 +12,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
+import { Play, Star } from "lucide-react";
 
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
@@ -41,8 +42,15 @@ const HomePage: React.FC = () => {
     navigate("/dashboard");
   };
 
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white">
       <Helmet>
         <title>
           PLAB 2 Practice – Online Practice Sessions, Cases, and Feedback
@@ -79,209 +87,191 @@ const HomePage: React.FC = () => {
           })}
         </script>
       </Helmet>
-      {/* Hero Section */}
-      <section className="bg-gradient-to-br from-blue-50 to-indigo-100 py-12 sm:py-16 md:py-20">
+      {/* Hero Section - Sample.tsx inspired */}
+      <section className="pt-12 sm:pt-16 md:pt-20 pb-12 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 overflow-hidden">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-8 md:gap-12 items-center">
-            <div className="max-w-xl mx-auto lg:mx-0">
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-4 sm:mb-6 leading-tight text-center lg:text-left">
-                Master Your <span className="text-blue-500">PLAB 2</span> Exam
-                with Confidence
-              </h1>
-              <p className="text-lg sm:text-xl text-gray-600 mb-6 sm:mb-8 leading-relaxed text-center lg:text-left">
-                Comprehensive exam preparation platform designed specifically
-                for medical professionals. Practice with real scenarios, track
-                your progress, and achieve your dream of practicing medicine in
-                the UK.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                <button
-                  onClick={handleStartSession}
-                  className="w-full sm:w-auto bg-blue-500 hover:bg-blue-600 text-white px-6 sm:px-8 py-3 rounded-lg font-semibold text-base sm:text-lg transition-colors flex items-center justify-center"
-                >
-                  Start Session
-                  <ChevronRight className="ml-2 h-5 w-5" />
-                </button>
-                {isAuthenticated ? (
-                  <button
-                    onClick={handleGoToDashboard}
-                    className="w-full sm:w-auto border-2 border-pink-500 text-pink-500 hover:bg-pink-500 hover:text-white px-6 sm:px-8 py-3 rounded-lg font-semibold text-base sm:text-lg transition-colors"
-                  >
-                    Go to Dashboard
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleJoinSession}
-                    className="w-full sm:w-auto border-2 border-pink-500 text-pink-500 hover:bg-pink-500 hover:text-white px-6 sm:px-8 py-3 rounded-lg font-semibold text-base sm:text-lg transition-colors"
-                  >
-                    Join Session
-                  </button>
-                )}
-              </div>
+          <div className="text-center mb-10 sm:mb-14">
+            <h1 className="text-3xl sm:text-4xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
+              Prepare for Your{" "}
+              <span className="bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
+                PLAB 2
+              </span>{" "}
+              Exam – 100% Free
+            </h1>
+
+            <p className="text-lg sm:text-xl text-gray-600 mb-8 max-w-3xl mx-auto leading-relaxed">
+              Practice real scenarios, get structured feedback, and track your
+              progress — all on a modern platform, completely free of charge.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-10">
+              <button
+                onClick={handleStartSession}
+                className="group bg-gradient-to-r from-blue-500 to-purple-600 text-white px-7 sm:px-8 py-3 sm:py-4 rounded-full font-semibold text-base sm:text-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 flex items-center"
+              >
+                Start Practicing Today
+                <ChevronRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+              </button>
+              {/* Secondary action removed per request */}
             </div>
-            <div className="mt-8 lg:mt-0 lg:pl-8">
-              <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-lg max-w-md mx-auto">
-                <div className="flex items-center space-x-4 mb-6">
-                  <div className="bg-blue-100 p-2 sm:p-3 rounded-lg">
-                    <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500" />
+
+            <div className="relative max-w-4xl mx-auto">
+              <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-r from-blue-500 to-purple-600 p-1 hover:shadow-3xl transition-shadow duration-500">
+                <div className="bg-gray-900 rounded-xl aspect-video flex items-center justify-center">
+                  <div className="text-center w-full h-full">
+                    <iframe
+                      className="w-full h-full rounded-xl"
+                      src="https://www.youtube.com/embed/_QT3yEareTo?si=T8Dp4Z9E97i7BbiT"
+                      title="YouTube video player"
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      referrerPolicy="strict-origin-when-cross-origin"
+                      allowFullScreen
+                    ></iframe>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 text-lg sm:text-xl">
-                      Clinical Scenarios
-                    </h3>
-                    <p className="text-gray-600 text-sm sm:text-base">
-                      Practice with real PLAB 2 cases
-                    </p>
-                  </div>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-3 sm:p-4 mb-4">
-                  <p className="text-sm sm:text-base text-gray-700 mb-2">
-                    <span className="font-medium">Patient:</span> Sample case
-                    preview
-                  </p>
-                  <p className="text-sm sm:text-base text-gray-700">
-                    <span className="font-medium">Your task:</span> Take history
-                    and examination
-                  </p>
-                </div>
-                <div className="flex space-x-2">
-                  <div className="h-2 bg-blue-500 rounded-full flex-1"></div>
-                  <div className="h-2 bg-blue-500 rounded-full flex-1"></div>
-                  <div className="h-2 bg-blue-500 rounded-full flex-1"></div>
-                  <div className="h-2 bg-gray-200 rounded-full flex-1"></div>
-                </div>
-                <p className="text-xs sm:text-sm text-gray-600 mt-2">
-                  Station Progress Indicator
-                </p>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Features Section */}
-      <section className="py-12 sm:py-16 md:py-20 bg-white">
+      {/* Features Section - Sample.tsx card styling */}
+      <section id="features" className="py-16 bg-white">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-10 sm:mb-16">
-            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-3 sm:mb-4">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
               Everything You Need to Pass PLAB 2
             </h2>
-            <p className="text-lg sm:text-xl text-gray-600 max-w-2xl sm:max-w-3xl mx-auto">
+            <p className="text-lg sm:text-xl text-gray-600 max-w-3xl mx-auto">
               Our comprehensive platform provides all the tools and resources
-              you need to succeed in your PLAB 2 examination.
+              you need to succeed.
             </p>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
-            {/* Feature 1 */}
-            <div className="bg-gray-50 rounded-lg p-6 sm:p-8 hover:shadow-lg transition-shadow">
-              <div className="bg-blue-100 p-2 sm:p-3 rounded-lg w-fit mb-4">
-                <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500" />
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="group bg-gradient-to-br from-gray-50 to-white rounded-3xl p-8 hover:shadow-2xl hover:shadow-blue-100 transition-all duration-500 border border-gray-100 hover:border-blue-200">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+                <FileText className="h-8 w-8 text-white" />
               </div>
-              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2 sm:mb-3">
+              <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors">
                 Practice Sessions
               </h3>
-              <p className="text-sm sm:text-base text-gray-600">
-                Real-time practice sessions with peers, covering all types of
-                clinical scenarios you'll encounter in PLAB 2.
+              <p className="text-gray-600">
+                Real-time practice sessions with peers, covering all clinical
+                scenarios you'll encounter in PLAB 2.
               </p>
             </div>
 
-            {/* Feature 2 */}
-            <div className="bg-gray-50 rounded-lg p-6 sm:p-8 hover:shadow-lg transition-shadow">
-              <div className="bg-pink-100 p-2 sm:p-3 rounded-lg w-fit mb-4">
-                <Clock className="h-6 w-6 sm:h-8 sm:w-8 text-pink-500" />
+            <div className="group bg-gradient-to-br from-gray-50 to-white rounded-3xl p-8 hover:shadow-2xl hover:shadow-blue-100 transition-all duration-500 border border-gray-100 hover:border-blue-200">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-pink-500 to-pink-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+                <Clock className="h-8 w-8 text-white" />
               </div>
-              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2 sm:mb-3">
+              <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors">
                 Timed Stations
               </h3>
-              <p className="text-sm sm:text-base text-gray-600">
+              <p className="text-gray-600">
                 Experience realistic station timing and transitions, just like
-                in the actual PLAB 2 examination.
+                in the actual examination.
               </p>
             </div>
 
-            {/* Feature 3 */}
-            <div className="bg-gray-50 rounded-lg p-6 sm:p-8 hover:shadow-lg transition-shadow">
-              <div className="bg-blue-100 p-2 sm:p-3 rounded-lg w-fit mb-4">
-                <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500" />
+            <div className="group bg-gradient-to-br from-gray-50 to-white rounded-3xl p-8 hover:shadow-2xl hover:shadow-blue-100 transition-all duration-500 border border-gray-100 hover:border-blue-200">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+                <BarChart3 className="h-8 w-8 text-white" />
               </div>
-              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2 sm:mb-3">
+              <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors">
                 Performance Feedback
               </h3>
-              <p className="text-sm sm:text-base text-gray-600">
+              <p className="text-gray-600">
                 Receive detailed feedback from peers and track your progress
-                across different clinical scenarios.
+                across scenarios.
               </p>
             </div>
 
-            {/* Feature 4 */}
-            <div className="bg-gray-50 rounded-lg p-6 sm:p-8 hover:shadow-lg transition-shadow">
-              <div className="bg-pink-100 p-2 sm:p-3 rounded-lg w-fit mb-4">
-                <BookOpen className="h-6 w-6 sm:h-8 sm:w-8 text-pink-500" />
+            <div className="group bg-gradient-to-br from-gray-50 to-white rounded-3xl p-8 hover:shadow-2xl hover:shadow-blue-100 transition-all duration-500 border border-gray-100 hover:border-blue-200">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-pink-500 to-pink-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+                <BookOpen className="h-8 w-8 text-white" />
               </div>
-              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2 sm:mb-3">
+              <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors">
                 Clinical Cases
               </h3>
-              <p className="text-sm sm:text-base text-gray-600">
-                Access a wide range of clinical scenarios covering all major
-                specialties and common PLAB 2 topics.
+              <p className="text-gray-600">
+                Access a wide range of clinical scenarios across major
+                specialties.
               </p>
             </div>
 
-            {/* Feature 5 */}
-            <div className="bg-gray-50 rounded-lg p-6 sm:p-8 hover:shadow-lg transition-shadow">
-              <div className="bg-blue-100 p-2 sm:p-3 rounded-lg w-fit mb-4">
-                <Users className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500" />
+            <div className="group bg-gradient-to-br from-gray-50 to-white rounded-3xl p-8 hover:shadow-2xl hover:shadow-blue-100 transition-all duration-500 border border-gray-100 hover:border-blue-200">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+                <Users className="h-8 w-8 text-white" />
               </div>
-              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2 sm:mb-3">
+              <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors">
                 Peer Learning
               </h3>
-              <p className="text-sm sm:text-base text-gray-600">
-                Practice with fellow medical professionals and learn from each
-                other's experiences and feedback.
+              <p className="text-gray-600">
+                Practice with fellow medical professionals and learn from shared
+                feedback.
               </p>
             </div>
 
-            {/* Feature 6 */}
-            <div className="bg-gray-50 rounded-lg p-6 sm:p-8 hover:shadow-lg transition-shadow">
-              <div className="bg-pink-100 p-2 sm:p-3 rounded-lg w-fit mb-4">
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-pink-500" />
+            <div className="group bg-gradient-to-br from-gray-50 to-white rounded-3xl p-8 hover:shadow-2xl hover:shadow-blue-100 transition-all duration-500 border border-gray-100 hover:border-blue-200">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-pink-500 to-pink-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+                <TrendingUp className="h-8 w-8 text-white" />
               </div>
-              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2 sm:mb-3">
+              <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors">
                 Progress Tracking
               </h3>
-              <p className="text-sm sm:text-base text-gray-600">
-                Monitor your improvement over time with detailed performance
-                analytics and progress reports.
+              <p className="text-gray-600">
+                Monitor improvement over time with detailed analytics and
+                progress reports.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Footer */}
+      {/* Contact CTA - slim full-width, above footer */}
+      <section className="py-8 sm:py-10 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 relative overflow-hidden">
+        <div className="absolute inset-0 bg-black/10"></div>
+        <div className="relative max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-white text-base sm:text-lg lg:text-xl font-semibold text-center sm:text-left">
+              Want to reach out? Use our contact form to ask questions, share
+              ideas, or give feedback.
+            </p>
+            <a
+              href="https://forms.gle/ZFQhWvfxgjYViHDHA"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center px-6 py-3 rounded-full bg-white text-blue-600 font-semibold hover:shadow-2xl hover:scale-105 transition-all duration-300"
+            >
+              Contact Us
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer - simplified Sample.tsx style */}
       <footer className="bg-gray-900 text-white py-12">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center">
-            <div className="flex items-center space-x-2 mb-4 md:mb-0">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex items-center space-x-2">
               <img
                 src="/logo.png"
                 alt="PLAB 2 Practice"
-                className="h-6 w-auto"
+                className="h-7 w-auto"
               />
+              <span className="sr-only">PLAB 2 Practice</span>
             </div>
-
             <p className="text-gray-400 text-center md:text-right">
-              © {new Date().getFullYear()} PLAB 2 Practice Platform. Helping
-              medical professionals achieve their UK practice goals.
+              © {new Date().getFullYear()} PLAB 2 Practice Platform
             </p>
-
             <a
               href="https://buymeacoffee.com/plab2practice"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-block bg-[#FFDD00] text-black font-semibold px-4 py-2 rounded-md mb-4 md:mb-0"
+              className="inline-block bg-[#FFDD00] text-black font-semibold px-4 py-2 rounded-md"
             >
               Buy me a coffee
             </a>

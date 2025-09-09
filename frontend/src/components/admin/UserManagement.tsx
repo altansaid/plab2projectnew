@@ -344,6 +344,15 @@ const UserManagement: React.FC = () => {
       <Dialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            border: "1px solid #e5e7eb",
+            backgroundColor: "rgba(255,255,255,0.9)",
+            backdropFilter: "blur(6px)",
+            boxShadow: "0 10px 20px rgba(2,6,23,0.08)",
+          },
+        }}
       >
         <DialogTitle>Confirm Delete</DialogTitle>
         <DialogContent>
@@ -353,11 +362,24 @@ const UserManagement: React.FC = () => {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={() => setDeleteDialogOpen(false)}
+            variant="outlined"
+            sx={{
+              borderRadius: 999,
+              textTransform: "none",
+              borderColor: "#93c5fd",
+              color: "#1d4ed8",
+              "&:hover": { borderColor: "#6366f1", backgroundColor: "#eff6ff" },
+            }}
+          >
+            Cancel
+          </Button>
           <Button
             onClick={handleDeleteConfirm}
             color="error"
             variant="contained"
+            sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
           >
             Delete
           </Button>
@@ -365,7 +387,19 @@ const UserManagement: React.FC = () => {
       </Dialog>
 
       {/* Edit Role Dialog */}
-      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)}>
+      <Dialog
+        open={editDialogOpen}
+        onClose={() => setEditDialogOpen(false)}
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            border: "1px solid #e5e7eb",
+            backgroundColor: "rgba(255,255,255,0.9)",
+            backdropFilter: "blur(6px)",
+            boxShadow: "0 10px 20px rgba(2,6,23,0.08)",
+          },
+        }}
+      >
         <DialogTitle>Change User Role</DialogTitle>
         <form onSubmit={editFormik.handleSubmit}>
           <DialogContent>
@@ -386,11 +420,40 @@ const UserManagement: React.FC = () => {
             </FormControl>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => setEditDialogOpen(false)}
+              variant="outlined"
+              sx={{
+                borderRadius: 999,
+                textTransform: "none",
+                borderColor: "#93c5fd",
+                color: "#1d4ed8",
+                "&:hover": {
+                  borderColor: "#6366f1",
+                  backgroundColor: "#eff6ff",
+                },
+              }}
+            >
+              Cancel
+            </Button>
             <Button
               type="submit"
               variant="contained"
               disabled={editFormik.isSubmitting}
+              sx={{
+                borderRadius: 999,
+                textTransform: "none",
+                fontWeight: 700,
+                color: "#fff",
+                background: "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+                "&:hover": {
+                  transform: "translateY(-1px)",
+                  boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                  background:
+                    "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                },
+              }}
             >
               {editFormik.isSubmitting ? "Updating..." : "Update Role"}
             </Button>

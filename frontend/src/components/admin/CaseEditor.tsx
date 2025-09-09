@@ -472,7 +472,21 @@ const CaseEditor: React.FC<CaseEditorProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="lg"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: 3,
+          border: "1px solid #e5e7eb",
+          backgroundColor: "rgba(255,255,255,0.9)",
+          backdropFilter: "blur(6px)",
+          boxShadow: "0 10px 20px rgba(2,6,23,0.08)",
+        },
+      }}
+    >
       <DialogTitle>{caseData ? "Edit Case" : "Create New Case"}</DialogTitle>
       <DialogContent>
         <Box sx={{ mt: 2 }}>

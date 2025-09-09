@@ -259,7 +259,7 @@ const RoleSelection: React.FC = () => {
   }
 
   return (
-    <Container maxWidth="lg">
+    <div className="min-h-[calc(100vh-64px)] bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 py-10">
       <Helmet>
         <title>Select Role – PLAB 2 Practice</title>
         <meta name="robots" content="noindex, nofollow" />
@@ -268,7 +268,10 @@ const RoleSelection: React.FC = () => {
           href={`https://plab2practice.com/session/${sessionCode || ""}/role`}
         />
       </Helmet>
-      <Box sx={{ py: 4 }}>
+      <Box
+        className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8"
+        sx={{ py: 0 }}
+      >
         {/* Header */}
         <Box textAlign="center" mb={4}>
           <Typography variant="h4" component="h1" gutterBottom>
@@ -330,6 +333,7 @@ const RoleSelection: React.FC = () => {
             mb: 4,
             flexWrap: "wrap",
             justifyContent: "center",
+            alignItems: "stretch",
           }}
         >
           {roleOptions.map((role) => {
@@ -346,9 +350,15 @@ const RoleSelection: React.FC = () => {
                   opacity: isDisabled ? 0.5 : 1,
                   border: isSelected
                     ? `2px solid ${role.color}`
-                    : "1px solid #e0e0e0",
+                    : "1px solid #e5e7eb",
                   transform: isSelected ? "translateY(-4px)" : "none",
                   transition: "all 0.2s ease-in-out",
+                  borderRadius: 2,
+                  backgroundColor: "rgba(255,255,255,0.85)",
+                  backdropFilter: "blur(6px)",
+                  boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+                  display: "flex",
+                  flexDirection: "column",
                   "&:hover": {
                     transform: isDisabled ? "none" : "translateY(-2px)",
                     boxShadow: isDisabled ? "none" : 3,
@@ -356,7 +366,15 @@ const RoleSelection: React.FC = () => {
                 }}
                 onClick={() => !isDisabled && handleRoleSelect(role.id)}
               >
-                <CardContent sx={{ textAlign: "center", p: 3 }}>
+                <CardContent
+                  sx={{
+                    textAlign: "center",
+                    p: 3,
+                    display: "flex",
+                    flexDirection: "column",
+                    height: "100%",
+                  }}
+                >
                   {/* Role Icon */}
                   <Box sx={{ mb: 2 }}>{role.icon}</Box>
 
@@ -371,7 +389,7 @@ const RoleSelection: React.FC = () => {
                   </Typography>
 
                   {/* Role Features */}
-                  <Box sx={{ textAlign: "left", mb: 3 }}>
+                  <Box sx={{ textAlign: "left", mb: 3, flexGrow: 1 }}>
                     {role.features.map((feature, index) => (
                       <Typography
                         key={index}
@@ -396,15 +414,24 @@ const RoleSelection: React.FC = () => {
                     fullWidth
                     disabled={isDisabled}
                     sx={{
+                      borderRadius: 999,
+                      textTransform: "none",
+                      fontWeight: 700,
                       borderColor: role.color,
-                      color: isSelected ? "white" : role.color,
-                      backgroundColor: isSelected ? role.color : "transparent",
+                      color: isSelected ? "#fff" : role.color,
+                      background: isSelected
+                        ? `linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)`
+                        : "transparent",
+                      boxShadow: isSelected
+                        ? "0 8px 16px rgba(59,130,246,0.20)"
+                        : "none",
                       "&:hover": {
-                        backgroundColor: isSelected
-                          ? role.color
-                          : `${role.color}10`,
+                        background: isSelected
+                          ? `linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)`
+                          : "#eff6ff",
                         borderColor: role.color,
                       },
+                      mt: "auto",
                     }}
                   >
                     {isDisabled
@@ -420,40 +447,6 @@ const RoleSelection: React.FC = () => {
         </Box>
 
         {/* Session Status */}
-        <Card sx={{ mb: 4 }}>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Session Status
-            </Typography>
-            <Divider sx={{ mb: 2 }} />
-            <Box sx={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-              <Box>
-                <Typography variant="body2" color="text.secondary">
-                  Doctor:
-                </Typography>
-                <Typography variant="body1" fontWeight="medium">
-                  Host (Assigned)
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="body2" color="text.secondary">
-                  Patient:
-                </Typography>
-                <Typography variant="body1" fontWeight="medium">
-                  {getRoleStatus("patient")}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="body2" color="text.secondary">
-                  Observers:
-                </Typography>
-                <Typography variant="body1" fontWeight="medium">
-                  {getRoleCount("observer")}
-                </Typography>
-              </Box>
-            </Box>
-          </CardContent>
-        </Card>
 
         {/* Continue Button */}
         <Box sx={{ textAlign: "center" }}>
@@ -462,13 +455,27 @@ const RoleSelection: React.FC = () => {
             size="large"
             onClick={handleContinue}
             disabled={!selectedRole}
-            sx={{ minWidth: 200, py: 1.5 }}
+            sx={{
+              minWidth: 200,
+              py: 1.5,
+              borderRadius: 999,
+              textTransform: "none",
+              fontWeight: 700,
+              color: "#fff",
+              background: "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+              boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+              "&:hover": {
+                transform: "translateY(-1px)",
+                boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                background: "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+              },
+            }}
           >
             Join Session
           </Button>
         </Box>
       </Box>
-    </Container>
+    </div>
   );
 };
 

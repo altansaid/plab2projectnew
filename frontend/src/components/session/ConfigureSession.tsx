@@ -271,7 +271,7 @@ const ConfigureSession: React.FC = () => {
   };
 
   return (
-    <Container maxWidth="lg">
+    <div className="min-h-[calc(100vh-64px)] bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 py-10">
       <Helmet>
         <title>Configure Session – PLAB 2 Practice</title>
         <meta name="robots" content="noindex, nofollow" />
@@ -282,545 +282,750 @@ const ConfigureSession: React.FC = () => {
           }/configure`}
         />
       </Helmet>
-      <Box sx={{ py: 4 }}>
-        {/* Header */}
-        <Box textAlign="center" mb={4}>
-          <Typography variant="h4" component="h1" gutterBottom>
-            Configure Session
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Set up the consultation timing and select a topic for optimal
-            practice experience
-          </Typography>
-        </Box>
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="py-4">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">
+              Configure Session
+            </h1>
+            <p className="text-gray-600">
+              Set up the consultation timing and select a topic for optimal
+              practice experience
+            </p>
+          </div>
 
-        {error && (
-          <Alert severity="error" sx={{ mb: 3 }}>
-            {error}
-          </Alert>
-        )}
+          {error && (
+            <Alert severity="error" sx={{ mb: 3 }}>
+              {error}
+            </Alert>
+          )}
 
-        {/* Session Participants */}
-        <Card sx={{ mb: 4 }}>
-          <CardContent>
-            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-              <GroupsIcon sx={{ mr: 1 }} />
-              <Typography variant="h6">Session Participants</Typography>
-            </Box>
-            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-              {participants.map((participant, index) => (
-                <Chip
-                  key={index}
-                  label={`${participant.username} (${
-                    participant.role.charAt(0).toUpperCase() +
-                    participant.role.slice(1)
-                  })`}
-                  sx={{
-                    backgroundColor: `${getRoleColor(participant.role)}20`,
-                    color: getRoleColor(participant.role),
-                    fontWeight: "medium",
-                  }}
-                />
-              ))}
-            </Box>
-          </CardContent>
-        </Card>
+          {/* Session Participants */}
+          <Card
+            sx={{
+              mb: 4,
+              borderRadius: 3,
+              border: "1px solid #e5e7eb",
+              backgroundColor: "rgba(255,255,255,0.8)",
+              backdropFilter: "blur(6px)",
+              boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+            }}
+          >
+            <CardContent>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                <GroupsIcon sx={{ mr: 1 }} />
+                <Typography variant="h6">Session Participants</Typography>
+              </Box>
+              <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                {participants.map((participant, index) => (
+                  <Chip
+                    key={index}
+                    label={`${participant.username} (${
+                      participant.role.charAt(0).toUpperCase() +
+                      participant.role.slice(1)
+                    })`}
+                    sx={{
+                      backgroundColor: `${getRoleColor(participant.role)}20`,
+                      color: getRoleColor(participant.role),
+                      fontWeight: "medium",
+                    }}
+                  />
+                ))}
+              </Box>
+            </CardContent>
+          </Card>
 
-        <Grid container spacing={4}>
-          <Grid item xs={12} lg={8}>
-            {/* Session Type */}
-            <Card sx={{ mb: 4 }}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Session Type
-                </Typography>
-                <Typography variant="body2" color="text.secondary" paragraph>
-                  Choose between topic-based practice or recall practice
-                </Typography>
-
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
-                    <Card
-                      variant="outlined"
-                      sx={{
-                        cursor: "pointer",
-                        border:
-                          config.sessionType === "topic"
-                            ? "2px solid #1976d2"
-                            : "1px solid #e0e0e0",
-                        backgroundColor:
-                          config.sessionType === "topic"
-                            ? "#1976d220"
-                            : "transparent",
-                      }}
-                      onClick={() =>
-                        setConfig((prev) => ({ ...prev, sessionType: "topic" }))
-                      }
-                    >
-                      <CardContent sx={{ textAlign: "center", py: 3 }}>
-                        <Typography variant="h6" color="primary" gutterBottom>
-                          Select Topic
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Practice by medical specialty
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Card
-                      variant="outlined"
-                      sx={{
-                        cursor: "pointer",
-                        border:
-                          config.sessionType === "recall"
-                            ? "2px solid #1976d2"
-                            : "1px solid #e0e0e0",
-                        backgroundColor:
-                          config.sessionType === "recall"
-                            ? "#1976d220"
-                            : "transparent",
-                      }}
-                      onClick={() =>
-                        setConfig((prev) => ({
-                          ...prev,
-                          sessionType: "recall",
-                        }))
-                      }
-                    >
-                      <CardContent sx={{ textAlign: "center", py: 3 }}>
-                        <Typography variant="h6" gutterBottom>
-                          Select Recall
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Practice by exam date
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                </Grid>
-              </CardContent>
-            </Card>
-
-            {/* Topic Selection */}
-            {config.sessionType === "topic" && (
-              <Card sx={{ mb: 4 }}>
+          <Grid container spacing={4}>
+            <Grid item xs={12} lg={8}>
+              {/* Session Type */}
+              <Card
+                sx={{
+                  mb: 4,
+                  borderRadius: 3,
+                  border: "1px solid #e5e7eb",
+                  backgroundColor: "rgba(255,255,255,0.8)",
+                  backdropFilter: "blur(6px)",
+                  boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+                }}
+              >
                 <CardContent>
                   <Typography variant="h6" gutterBottom>
-                    Choose Medical Topics
+                    Session Type
                   </Typography>
-
-                  <FormControl fullWidth sx={{ mb: 2 }}>
-                    <InputLabel>Select a topic to add</InputLabel>
-                    <Select
-                      value=""
-                      onChange={handleTopicChange}
-                      label="Select a topic to add"
-                    >
-                      {availableTopics
-                        .filter(
-                          (topic) => !config.selectedTopics.includes(topic)
-                        )
-                        .map((topic) => (
-                          <MenuItem key={topic} value={topic}>
-                            {topic}
-                          </MenuItem>
-                        ))}
-                    </Select>
-                  </FormControl>
-
-                  <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-                    {config.selectedTopics.map((topic) => (
-                      <Chip
-                        key={topic}
-                        label={
-                          topic === "Random"
-                            ? `Random (${availableTopics.length - 1})`
-                            : topic
-                        }
-                        onDelete={() => handleRemoveTopic(topic)}
-                        color="primary"
-                        variant="outlined"
-                      />
-                    ))}
-                  </Box>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Recall Date Range Selection */}
-            {config.sessionType === "recall" && (
-              <Card sx={{ mb: 4 }}>
-                <CardContent>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                      mb: 2,
-                    }}
-                  >
-                    <DateRangeIcon color="primary" />
-                    <Typography variant="h6">
-                      Choose Recall Date Range
-                    </Typography>
-                  </Box>
                   <Typography variant="body2" color="text.secondary" paragraph>
-                    Select a date range to practice cases that fall within this
-                    period. This allows you to practice multiple related cases
-                    from a specific time frame.
+                    Choose between topic-based practice or recall practice
                   </Typography>
 
-                  <Grid container spacing={2} sx={{ mb: 2 }}>
+                  <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Start Date"
-                        type="date"
-                        fullWidth
-                        value={
-                          config.recallStartDate
-                            ? config.recallStartDate.toISOString().split("T")[0]
-                            : ""
-                        }
-                        onChange={(e) => {
-                          const date = e.target.value
-                            ? new Date(e.target.value)
-                            : null;
+                      <Card
+                        variant="outlined"
+                        sx={{
+                          cursor: "pointer",
+                          borderRadius: 3,
+                          border:
+                            config.sessionType === "topic"
+                              ? "2px solid #3b82f6"
+                              : "1px solid #e5e7eb",
+                          backgroundColor:
+                            config.sessionType === "topic"
+                              ? "#3b82f61a"
+                              : "#ffffff",
+                        }}
+                        onClick={() =>
                           setConfig((prev) => ({
                             ...prev,
-                            recallStartDate: date,
-                          }));
-                        }}
-                        InputLabelProps={{
-                          shrink: true,
-                        }}
-                        inputProps={{
-                          max: config.recallEndDate
-                            ? config.recallEndDate.toISOString().split("T")[0]
-                            : undefined,
-                        }}
-                      />
+                            sessionType: "topic",
+                          }))
+                        }
+                      >
+                        <CardContent sx={{ textAlign: "center", py: 3 }}>
+                          <Typography variant="h6" color="primary" gutterBottom>
+                            Select Topic
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Practice by medical specialty
+                          </Typography>
+                        </CardContent>
+                      </Card>
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="End Date"
-                        type="date"
-                        fullWidth
-                        value={
-                          config.recallEndDate
-                            ? config.recallEndDate.toISOString().split("T")[0]
-                            : ""
-                        }
-                        onChange={(e) => {
-                          const date = e.target.value
-                            ? new Date(e.target.value)
-                            : null;
+                      <Card
+                        variant="outlined"
+                        sx={{
+                          cursor: "pointer",
+                          borderRadius: 3,
+                          border:
+                            config.sessionType === "recall"
+                              ? "2px solid #3b82f6"
+                              : "1px solid #e5e7eb",
+                          backgroundColor:
+                            config.sessionType === "recall"
+                              ? "#3b82f61a"
+                              : "#ffffff",
+                        }}
+                        onClick={() =>
                           setConfig((prev) => ({
                             ...prev,
-                            recallEndDate: date,
-                          }));
-                        }}
-                        InputLabelProps={{
-                          shrink: true,
-                        }}
-                        inputProps={{
-                          min: config.recallStartDate
-                            ? config.recallStartDate.toISOString().split("T")[0]
-                            : undefined,
-                        }}
-                      />
+                            sessionType: "recall",
+                          }))
+                        }
+                      >
+                        <CardContent sx={{ textAlign: "center", py: 3 }}>
+                          <Typography variant="h6" gutterBottom>
+                            Select Recall
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Practice by exam date
+                          </Typography>
+                        </CardContent>
+                      </Card>
                     </Grid>
                   </Grid>
-
-                  {config.recallStartDate && config.recallEndDate && (
-                    <Box
-                      sx={{
-                        p: 2,
-                        backgroundColor: "#e3f2fd",
-                        borderRadius: 1,
-                        border: "1px solid #bbdefb",
-                      }}
-                    >
-                      <Typography variant="body2" color="primary">
-                        📅 Selected Range:{" "}
-                        {config.recallStartDate.toLocaleDateString()} to{" "}
-                        {config.recallEndDate.toLocaleDateString()}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Cases with recall dates in this range will be available
-                        for practice
-                      </Typography>
-                    </Box>
-                  )}
-
-                  {loading && (
-                    <Box
-                      sx={{
-                        p: 3,
-                        textAlign: "center",
-                        backgroundColor: "#f5f5f5",
-                        borderRadius: 1,
-                        mt: 2,
-                      }}
-                    >
-                      <Typography variant="body1" color="text.secondary">
-                        Loading available recall dates...
-                      </Typography>
-                    </Box>
-                  )}
-
-                  {!loading && availableRecallDates.length === 0 && (
-                    <Box
-                      sx={{
-                        p: 3,
-                        textAlign: "center",
-                        backgroundColor: "#f5f5f5",
-                        borderRadius: 1,
-                        mt: 2,
-                      }}
-                    >
-                      <Typography variant="body1" color="text.secondary">
-                        No recall dates available yet
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Cases need to be marked for recall practice in the admin
-                        panel
-                      </Typography>
-                    </Box>
-                  )}
                 </CardContent>
               </Card>
-            )}
 
-            {/* Timing Configuration */}
-            <Card sx={{ mb: 4 }}>
-              <CardContent>
-                <Grid container spacing={4}>
-                  {/* Reading Time */}
-                  <Grid item xs={12} md={6}>
+              {/* Topic Selection */}
+              {config.sessionType === "topic" && (
+                <Card
+                  sx={{
+                    mb: 4,
+                    borderRadius: 3,
+                    border: "1px solid #e5e7eb",
+                    backgroundColor: "rgba(255,255,255,0.8)",
+                    backdropFilter: "blur(6px)",
+                    boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+                  }}
+                >
+                  <CardContent>
                     <Typography variant="h6" gutterBottom>
-                      Reading Time
+                      Choose Medical Topics
                     </Typography>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      paragraph
-                    >
-                      Time for participants to read their notes before
-                      consultation begins
-                    </Typography>
+
+                    <FormControl fullWidth sx={{ mb: 2 }}>
+                      <InputLabel>Select a topic to add</InputLabel>
+                      <Select
+                        value=""
+                        onChange={handleTopicChange}
+                        label="Select a topic to add"
+                      >
+                        {availableTopics
+                          .filter(
+                            (topic) => !config.selectedTopics.includes(topic)
+                          )
+                          .map((topic) => (
+                            <MenuItem key={topic} value={topic}>
+                              {topic}
+                            </MenuItem>
+                          ))}
+                      </Select>
+                    </FormControl>
 
                     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-                      {readingTimeOptions.map((time) => (
-                        <Button
-                          key={time}
-                          variant={
-                            config.readingTime === time
-                              ? "contained"
-                              : "outlined"
+                      {config.selectedTopics.map((topic) => (
+                        <Chip
+                          key={topic}
+                          label={
+                            topic === "Random"
+                              ? `Random (${availableTopics.length - 1})`
+                              : topic
                           }
-                          onClick={() =>
-                            handleTimingChange("readingTime", time)
-                          }
-                          sx={{ minWidth: 80 }}
-                        >
-                          <Box textAlign="center">
-                            <Typography variant="h6">{time}</Typography>
-                            <Typography variant="caption">
-                              {time === 1 ? "minute" : "minutes"}
-                            </Typography>
-                          </Box>
-                        </Button>
+                          onDelete={() => handleRemoveTopic(topic)}
+                          color="primary"
+                          variant="outlined"
+                        />
                       ))}
                     </Box>
-                  </Grid>
+                  </CardContent>
+                </Card>
+              )}
 
-                  {/* Consultation Time */}
-                  <Grid item xs={12} md={6}>
-                    <Typography variant="h6" gutterBottom>
-                      Consultation Time
-                    </Typography>
+              {/* Recall Date Range Selection */}
+              {config.sessionType === "recall" && (
+                <Card
+                  sx={{
+                    mb: 4,
+                    borderRadius: 3,
+                    border: "1px solid #e5e7eb",
+                    backgroundColor: "rgba(255,255,255,0.8)",
+                    backdropFilter: "blur(6px)",
+                    boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+                  }}
+                >
+                  <CardContent>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 1,
+                        mb: 2,
+                      }}
+                    >
+                      <DateRangeIcon color="primary" />
+                      <Typography variant="h6">
+                        Choose Recall Date Range
+                      </Typography>
+                    </Box>
                     <Typography
                       variant="body2"
                       color="text.secondary"
                       paragraph
                     >
-                      Duration for the actual consultation practice
+                      Select a date range to practice cases that fall within
+                      this period. This allows you to practice multiple related
+                      cases from a specific time frame.
                     </Typography>
 
-                    {/* Timing Type Selection */}
-                    <Box sx={{ mb: 2 }}>
-                      <Button
-                        variant={
-                          config.timingType === "countdown"
-                            ? "contained"
-                            : "outlined"
-                        }
-                        onClick={() =>
-                          handleTimingChange("timingType", "countdown")
-                        }
-                        sx={{ mr: 1 }}
-                        startIcon={<TimerIcon />}
-                      >
-                        Countdown
-                      </Button>
-                      <Button
-                        variant={
-                          config.timingType === "stopwatch"
-                            ? "contained"
-                            : "outlined"
-                        }
-                        onClick={() =>
-                          handleTimingChange("timingType", "stopwatch")
-                        }
-                        startIcon={<TimerIcon />}
-                      >
-                        Stopwatch
-                      </Button>
-                    </Box>
-
-                    <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-                      {consultationTimeOptions.map((time) => (
-                        <Button
-                          key={time}
-                          variant={
-                            config.consultationTime === time
-                              ? "contained"
-                              : "outlined"
+                    <Grid container spacing={2} sx={{ mb: 2 }}>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          label="Start Date"
+                          type="date"
+                          fullWidth
+                          value={
+                            config.recallStartDate
+                              ? config.recallStartDate
+                                  .toISOString()
+                                  .split("T")[0]
+                              : ""
                           }
-                          onClick={() =>
-                            handleTimingChange("consultationTime", time)
-                          }
+                          onChange={(e) => {
+                            const date = e.target.value
+                              ? new Date(e.target.value)
+                              : null;
+                            setConfig((prev) => ({
+                              ...prev,
+                              recallStartDate: date,
+                            }));
+                          }}
+                          InputLabelProps={{
+                            shrink: true,
+                          }}
+                          inputProps={{
+                            max: config.recallEndDate
+                              ? config.recallEndDate.toISOString().split("T")[0]
+                              : undefined,
+                          }}
                           sx={{
-                            minWidth: 80,
-                            backgroundColor:
-                              config.consultationTime === time &&
-                              config.timingType === "countdown"
-                                ? "#4caf50"
-                                : undefined,
-                            "&:hover": {
-                              backgroundColor:
-                                config.consultationTime === time &&
-                                config.timingType === "countdown"
-                                  ? "#45a049"
-                                  : undefined,
+                            "& .MuiOutlinedInput-root": {
+                              borderRadius: 2,
+                              "& fieldset": { borderColor: "#93c5fd" },
+                              "&:hover fieldset": { borderColor: "#6366f1" },
+                              "&.Mui-focused fieldset": {
+                                borderColor: "#3b82f6",
+                                borderWidth: 2,
+                              },
+                            },
+                            "& .MuiInputLabel-root.Mui-focused": {
+                              color: "#3b82f6",
                             },
                           }}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          label="End Date"
+                          type="date"
+                          fullWidth
+                          value={
+                            config.recallEndDate
+                              ? config.recallEndDate.toISOString().split("T")[0]
+                              : ""
+                          }
+                          onChange={(e) => {
+                            const date = e.target.value
+                              ? new Date(e.target.value)
+                              : null;
+                            setConfig((prev) => ({
+                              ...prev,
+                              recallEndDate: date,
+                            }));
+                          }}
+                          InputLabelProps={{
+                            shrink: true,
+                          }}
+                          inputProps={{
+                            min: config.recallStartDate
+                              ? config.recallStartDate
+                                  .toISOString()
+                                  .split("T")[0]
+                              : undefined,
+                          }}
+                          sx={{
+                            "& .MuiOutlinedInput-root": {
+                              borderRadius: 2,
+                              "& fieldset": { borderColor: "#93c5fd" },
+                              "&:hover fieldset": { borderColor: "#6366f1" },
+                              "&.Mui-focused fieldset": {
+                                borderColor: "#3b82f6",
+                                borderWidth: 2,
+                              },
+                            },
+                            "& .MuiInputLabel-root.Mui-focused": {
+                              color: "#3b82f6",
+                            },
+                          }}
+                        />
+                      </Grid>
+                    </Grid>
+
+                    {config.recallStartDate && config.recallEndDate && (
+                      <Box
+                        sx={{
+                          p: 2,
+                          backgroundColor: "#e3f2fd",
+                          borderRadius: 1,
+                          border: "1px solid #bbdefb",
+                        }}
+                      >
+                        <Typography variant="body2" color="primary">
+                          📅 Selected Range:{" "}
+                          {config.recallStartDate.toLocaleDateString()} to{" "}
+                          {config.recallEndDate.toLocaleDateString()}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Cases with recall dates in this range will be
+                          available for practice
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {loading && (
+                      <Box
+                        sx={{
+                          p: 3,
+                          textAlign: "center",
+                          backgroundColor: "#f5f5f5",
+                          borderRadius: 1,
+                          mt: 2,
+                        }}
+                      >
+                        <Typography variant="body1" color="text.secondary">
+                          Loading available recall dates...
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {!loading && availableRecallDates.length === 0 && (
+                      <Box
+                        sx={{
+                          p: 3,
+                          textAlign: "center",
+                          backgroundColor: "#f5f5f5",
+                          borderRadius: 1,
+                          mt: 2,
+                        }}
+                      >
+                        <Typography variant="body1" color="text.secondary">
+                          No recall dates available yet
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Cases need to be marked for recall practice in the
+                          admin panel
+                        </Typography>
+                      </Box>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Timing Configuration */}
+              <Card
+                sx={{
+                  mb: 4,
+                  borderRadius: 3,
+                  border: "1px solid #e5e7eb",
+                  backgroundColor: "rgba(255,255,255,0.8)",
+                  backdropFilter: "blur(6px)",
+                  boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+                }}
+              >
+                <CardContent>
+                  <Grid container spacing={4}>
+                    {/* Reading Time */}
+                    <Grid item xs={12} md={6}>
+                      <Typography variant="h6" gutterBottom>
+                        Reading Time
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        paragraph
+                      >
+                        Time for participants to read their notes before
+                        consultation begins
+                      </Typography>
+
+                      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                        {readingTimeOptions.map((time) => (
+                          <Button
+                            key={time}
+                            variant={
+                              config.readingTime === time
+                                ? "contained"
+                                : "outlined"
+                            }
+                            onClick={() =>
+                              handleTimingChange("readingTime", time)
+                            }
+                            sx={{
+                              minWidth: 80,
+                              ...(config.readingTime === time
+                                ? {
+                                    color: "#fff",
+                                    background:
+                                      "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                                    boxShadow:
+                                      "0 8px 16px rgba(59,130,246,0.20)",
+                                    "&:hover": {
+                                      background:
+                                        "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                                    },
+                                  }
+                                : {
+                                    borderColor: "#93c5fd",
+                                    color: "#1d4ed8",
+                                    "&:hover": {
+                                      borderColor: "#6366f1",
+                                      backgroundColor: "#eff6ff",
+                                    },
+                                  }),
+                            }}
+                          >
+                            <Box textAlign="center">
+                              <Typography variant="h6">{time}</Typography>
+                              <Typography variant="caption">
+                                {time === 1 ? "minute" : "minutes"}
+                              </Typography>
+                            </Box>
+                          </Button>
+                        ))}
+                      </Box>
+                    </Grid>
+
+                    {/* Consultation Time */}
+                    <Grid item xs={12} md={6}>
+                      <Typography variant="h6" gutterBottom>
+                        Consultation Time
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        paragraph
+                      >
+                        Duration for the actual consultation practice
+                      </Typography>
+
+                      {/* Timing Type Selection */}
+                      <Box sx={{ mb: 2 }}>
+                        <Button
+                          variant={
+                            config.timingType === "countdown"
+                              ? "contained"
+                              : "outlined"
+                          }
+                          onClick={() =>
+                            handleTimingChange("timingType", "countdown")
+                          }
+                          sx={{
+                            mr: 1,
+                            ...(config.timingType === "countdown"
+                              ? {
+                                  borderRadius: 999,
+                                  textTransform: "none",
+                                  fontWeight: 700,
+                                  color: "#fff",
+                                  background:
+                                    "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                                  boxShadow: "0 8px 16px rgba(59,130,246,0.20)",
+                                  "&:hover": {
+                                    background:
+                                      "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                                  },
+                                }
+                              : {
+                                  textTransform: "none",
+                                  borderColor: "#93c5fd",
+                                  color: "#1d4ed8",
+                                  "&:hover": {
+                                    borderColor: "#6366f1",
+                                    backgroundColor: "#eff6ff",
+                                  },
+                                }),
+                          }}
+                          startIcon={<TimerIcon />}
                         >
-                          <Box textAlign="center">
-                            <Typography variant="h6">{time}</Typography>
-                            <Typography variant="caption">minutes</Typography>
-                          </Box>
+                          Countdown
                         </Button>
-                      ))}
-                    </Box>
+                        <Button
+                          variant={
+                            config.timingType === "stopwatch"
+                              ? "contained"
+                              : "outlined"
+                          }
+                          onClick={() =>
+                            handleTimingChange("timingType", "stopwatch")
+                          }
+                          sx={{
+                            ...(config.timingType === "stopwatch"
+                              ? {
+                                  borderRadius: 999,
+                                  textTransform: "none",
+                                  fontWeight: 700,
+                                  color: "#fff",
+                                  background:
+                                    "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                                  boxShadow: "0 8px 16px rgba(59,130,246,0.20)",
+                                  "&:hover": {
+                                    background:
+                                      "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                                  },
+                                }
+                              : {
+                                  textTransform: "none",
+                                  borderColor: "#93c5fd",
+                                  color: "#1d4ed8",
+                                  "&:hover": {
+                                    borderColor: "#6366f1",
+                                    backgroundColor: "#eff6ff",
+                                  },
+                                }),
+                          }}
+                          startIcon={<TimerIcon />}
+                        >
+                          Stopwatch
+                        </Button>
+                      </Box>
+
+                      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                        {consultationTimeOptions.map((time) => (
+                          <Button
+                            key={time}
+                            variant={
+                              config.consultationTime === time
+                                ? "contained"
+                                : "outlined"
+                            }
+                            onClick={() =>
+                              handleTimingChange("consultationTime", time)
+                            }
+                            sx={{
+                              minWidth: 80,
+                              ...(config.consultationTime === time
+                                ? config.timingType === "countdown"
+                                  ? {
+                                      color: "#fff",
+                                      background:
+                                        "linear-gradient(90deg, #22c55e 0%, #16a34a 100%)",
+                                      boxShadow:
+                                        "0 8px 16px rgba(34,197,94,0.20)",
+                                      "&:hover": {
+                                        background:
+                                          "linear-gradient(90deg, #16a34a 0%, #15803d 100%)",
+                                      },
+                                    }
+                                  : {
+                                      color: "#fff",
+                                      background:
+                                        "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                                      boxShadow:
+                                        "0 8px 16px rgba(59,130,246,0.20)",
+                                      "&:hover": {
+                                        background:
+                                          "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                                      },
+                                    }
+                                : {
+                                    borderColor: "#93c5fd",
+                                    color: "#1d4ed8",
+                                    "&:hover": {
+                                      borderColor: "#6366f1",
+                                      backgroundColor: "#eff6ff",
+                                    },
+                                  }),
+                            }}
+                          >
+                            <Box textAlign="center">
+                              <Typography variant="h6">{time}</Typography>
+                              <Typography variant="caption">minutes</Typography>
+                            </Box>
+                          </Button>
+                        ))}
+                      </Box>
+                    </Grid>
                   </Grid>
-                </Grid>
-              </CardContent>
-            </Card>
-          </Grid>
+                </CardContent>
+              </Card>
+            </Grid>
 
-          {/* Session Summary */}
-          <Grid item xs={12} lg={4}>
-            <Card sx={{ position: "sticky", top: 20 }}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Session Summary
-                </Typography>
-                <Divider sx={{ mb: 2 }} />
-
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    Session Type:
+            {/* Session Summary */}
+            <Grid item xs={12} lg={4}>
+              <Card
+                sx={{
+                  position: "sticky",
+                  top: 20,
+                  borderRadius: 3,
+                  border: "1px solid #e5e7eb",
+                  backgroundColor: "rgba(255,255,255,0.8)",
+                  backdropFilter: "blur(6px)",
+                  boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+                }}
+              >
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    Session Summary
                   </Typography>
-                  <Typography variant="body1" fontWeight="medium">
-                    {config.sessionType === "topic"
-                      ? "Topic-Based Practice"
-                      : "Recall Practice"}
-                  </Typography>
-                </Box>
+                  <Divider sx={{ mb: 2 }} />
 
-                {config.sessionType === "topic" && (
                   <Box sx={{ mb: 2 }}>
                     <Typography variant="body2" color="text.secondary">
-                      Selected Topics:
+                      Session Type:
                     </Typography>
                     <Typography variant="body1" fontWeight="medium">
-                      {config.selectedTopics.length > 0
-                        ? config.selectedTopics.join(", ")
-                        : "None selected"}
+                      {config.sessionType === "topic"
+                        ? "Topic-Based Practice"
+                        : "Recall Practice"}
                     </Typography>
                   </Box>
-                )}
 
-                {config.sessionType === "recall" && (
+                  {config.sessionType === "topic" && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Selected Topics:
+                      </Typography>
+                      <Typography variant="body1" fontWeight="medium">
+                        {config.selectedTopics.length > 0
+                          ? config.selectedTopics.join(", ")
+                          : "None selected"}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {config.sessionType === "recall" && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Recall Date Range:
+                      </Typography>
+                      <Typography variant="body1" fontWeight="medium">
+                        {config.recallStartDate && config.recallEndDate
+                          ? `${config.recallStartDate.toLocaleDateString()} - ${config.recallEndDate.toLocaleDateString()}`
+                          : "Not selected"}
+                      </Typography>
+                    </Box>
+                  )}
+
                   <Box sx={{ mb: 2 }}>
                     <Typography variant="body2" color="text.secondary">
-                      Recall Date Range:
+                      Reading Phase:
                     </Typography>
                     <Typography variant="body1" fontWeight="medium">
-                      {config.recallStartDate && config.recallEndDate
-                        ? `${config.recallStartDate.toLocaleDateString()} - ${config.recallEndDate.toLocaleDateString()}`
-                        : "Not selected"}
+                      {formatTime(config.readingTime)}
                     </Typography>
                   </Box>
-                )}
 
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    Reading Phase:
-                  </Typography>
-                  <Typography variant="body1" fontWeight="medium">
-                    {formatTime(config.readingTime)}
-                  </Typography>
-                </Box>
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Consultation Timer:
+                    </Typography>
+                    <Typography variant="body1" fontWeight="medium">
+                      {formatTime(config.consultationTime)} {config.timingType}
+                    </Typography>
+                  </Box>
 
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    Consultation Timer:
-                  </Typography>
-                  <Typography variant="body1" fontWeight="medium">
-                    {formatTime(config.consultationTime)} {config.timingType}
-                  </Typography>
-                </Box>
+                  <Divider sx={{ my: 2 }} />
 
-                <Divider sx={{ my: 2 }} />
+                  <Box sx={{ mb: 3 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Total Session Time:
+                    </Typography>
+                    <Typography variant="h6" fontWeight="bold">
+                      {formatTime(getTotalSessionTime())}
+                    </Typography>
+                  </Box>
 
-                <Box sx={{ mb: 3 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    Total Session Time:
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    size="large"
+                    onClick={handleStartSession}
+                    disabled={!isFormValid()}
+                    startIcon={<TimerIcon />}
+                    sx={{
+                      py: 1.5,
+                      borderRadius: 999,
+                      textTransform: "none",
+                      fontWeight: 700,
+                      color: "#fff",
+                      background:
+                        "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                      boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+                      "&:hover": {
+                        transform: "translateY(-1px)",
+                        boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                        background:
+                          "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                      },
+                    }}
+                  >
+                    Start Practice Session
+                  </Button>
+
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ mt: 1, display: "block", textAlign: "center" }}
+                  >
+                    A random case from the selected topic(s) will be assigned
+                    once you start
                   </Typography>
-                  <Typography variant="h6" fontWeight="bold">
-                    {formatTime(getTotalSessionTime())}
-                  </Typography>
-                </Box>
-
-                <Button
-                  variant="contained"
-                  fullWidth
-                  size="large"
-                  onClick={handleStartSession}
-                  disabled={!isFormValid()}
-                  startIcon={<TimerIcon />}
-                  sx={{ py: 1.5 }}
-                >
-                  Start Practice Session
-                </Button>
-
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ mt: 1, display: "block", textAlign: "center" }}
-                >
-                  A random case from the selected topic(s) will be assigned once
-                  you start
-                </Typography>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </Grid>
           </Grid>
-        </Grid>
-      </Box>
-    </Container>
+        </div>
+      </div>
+    </div>
   );
 };
 

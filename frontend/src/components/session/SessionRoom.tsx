@@ -578,7 +578,15 @@ const StableFeedbackComponent = ({
   }
 
   return (
-    <Card>
+    <Card
+      sx={{
+        borderRadius: 3,
+        border: "1px solid #e5e7eb",
+        backgroundColor: "rgba(255,255,255,0.8)",
+        backdropFilter: "blur(6px)",
+        boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+      }}
+    >
       <CardContent>
         <Typography variant="h6" gutterBottom>
           {isConsultationPhase
@@ -725,6 +733,18 @@ const StableFeedbackComponent = ({
             fullWidth
             size="small"
             placeholder="Any additional feedback or suggestions..."
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 2,
+                "& fieldset": { borderColor: "#93c5fd" },
+                "&:hover fieldset": { borderColor: "#6366f1" },
+                "&.Mui-focused fieldset": {
+                  borderColor: "#3b82f6",
+                  borderWidth: 2,
+                },
+              },
+              "& .MuiInputLabel-root.Mui-focused": { color: "#3b82f6" },
+            }}
           />
         </Box>
 
@@ -752,6 +772,21 @@ const StableFeedbackComponent = ({
                 onClick={() => handleSubmit(false)}
                 disabled={!isComplete() || isSubmitting}
                 size="large"
+                sx={{
+                  borderRadius: 999,
+                  textTransform: "none",
+                  fontWeight: 700,
+                  color: "#fff",
+                  background:
+                    "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                  boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+                  "&:hover": {
+                    transform: "translateY(-1px)",
+                    boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                    background:
+                      "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                  },
+                }}
               >
                 {isSubmitting ? "Submitting..." : "Submit Feedback & Close"}
               </Button>
@@ -762,6 +797,21 @@ const StableFeedbackComponent = ({
                   disabled={!isComplete() || isSubmitting}
                   size="large"
                   startIcon={<NewCaseIcon />}
+                  sx={{
+                    borderRadius: 999,
+                    textTransform: "none",
+                    fontWeight: 700,
+                    color: "#fff",
+                    background:
+                      "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                    boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+                    "&:hover": {
+                      transform: "translateY(-1px)",
+                      boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                      background:
+                        "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                    },
+                  }}
                 >
                   {isSubmitting ? "Submitting..." : "Submit & New Case"}
                 </Button>
@@ -773,7 +823,21 @@ const StableFeedbackComponent = ({
                   disabled={!isComplete() || isSubmitting}
                   size="large"
                   startIcon={<NewCaseIcon />}
-                  sx={{ bgcolor: "secondary.main" }}
+                  sx={{
+                    borderRadius: 999,
+                    textTransform: "none",
+                    fontWeight: 700,
+                    color: "#fff",
+                    background:
+                      "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                    boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+                    "&:hover": {
+                      transform: "translateY(-1px)",
+                      boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                      background:
+                        "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                    },
+                  }}
                 >
                   {isSubmitting ? "Submitting..." : "Submit & Role Change"}
                 </Button>
@@ -857,7 +921,15 @@ const PatientInformationCard: React.FC<PatientInformationCardProps> = ({
       : "";
 
   return (
-    <Card>
+    <Card
+      sx={{
+        borderRadius: 3,
+        border: "1px solid #e5e7eb",
+        backgroundColor: "rgba(255,255,255,0.8)",
+        backdropFilter: "blur(6px)",
+        boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+      }}
+    >
       <CardContent>
         <Box>
           {userRole.toLowerCase() !== "doctor" && (
@@ -913,6 +985,15 @@ const PatientInformationCard: React.FC<PatientInformationCardProps> = ({
         onClose={() => setShowImageModal(false)}
         maxWidth="md"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            border: "1px solid #e5e7eb",
+            backgroundColor: "rgba(255,255,255,0.9)",
+            backdropFilter: "blur(6px)",
+            boxShadow: "0 10px 20px rgba(2,6,23,0.08)",
+          },
+        }}
       >
         <DialogTitle
           sx={{
@@ -1017,7 +1098,15 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({
         </Grid>
 
         <Grid item xs={12} md={4}>
-          <Card>
+          <Card
+            sx={{
+              borderRadius: 3,
+              border: "1px solid #e5e7eb",
+              backgroundColor: "rgba(255,255,255,0.8)",
+              backdropFilter: "blur(6px)",
+              boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+            }}
+          >
             <CardContent>
               <Typography variant="h6" gutterBottom>
                 Consultation Phase
@@ -1045,7 +1134,16 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({
           {(userRole === "doctor" ||
             selectedCase?.visualData?.content ||
             selectedCase?.imageUrl) && (
-            <Card sx={{ mt: 2 }}>
+            <Card
+              sx={{
+                mt: 2,
+                borderRadius: 3,
+                border: "1px solid #e5e7eb",
+                backgroundColor: "rgba(255,255,255,0.8)",
+                backdropFilter: "blur(6px)",
+                boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+              }}
+            >
               <CardContent>
                 <Typography variant="h6" gutterBottom>
                   Session Controls
@@ -1057,7 +1155,16 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({
                     fullWidth
                     startIcon={<ImageIcon />}
                     onClick={() => setShowContentModal(true)}
-                    sx={{ py: 1.5, mb: 1 }}
+                    sx={{
+                      py: 1.5,
+                      mb: 1,
+                      borderColor: "#93c5fd",
+                      color: "#1d4ed8",
+                      "&:hover": {
+                        borderColor: "#6366f1",
+                        backgroundColor: "#eff6ff",
+                      },
+                    }}
                   >
                     Examination Findings
                   </Button>
@@ -1069,7 +1176,22 @@ const ConsultationView: React.FC<ConsultationViewProps> = ({
                     startIcon={<FeedbackIcon />}
                     onClick={onGiveFeedback}
                     disabled={buttonStates.giveFeedback}
-                    sx={{ py: 1.5 }}
+                    sx={{
+                      py: 1.5,
+                      borderRadius: 999,
+                      textTransform: "none",
+                      fontWeight: 700,
+                      color: "#fff",
+                      background:
+                        "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                      boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+                      "&:hover": {
+                        transform: "translateY(-1px)",
+                        boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                        background:
+                          "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                      },
+                    }}
                   >
                     {buttonStates.giveFeedback
                       ? "Ending..."
@@ -2108,7 +2230,15 @@ const SessionRoomMain: React.FC = () => {
         <Container maxWidth="lg">
           <Grid container spacing={3}>
             <Grid item xs={12} md={8}>
-              <Card>
+              <Card
+                sx={{
+                  borderRadius: 3,
+                  border: "1px solid #e5e7eb",
+                  backgroundColor: "rgba(255,255,255,0.8)",
+                  backdropFilter: "blur(6px)",
+                  boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+                }}
+              >
                 <CardContent>
                   <Typography variant="h4" gutterBottom>
                     Waiting Room
@@ -2163,7 +2293,23 @@ const SessionRoomMain: React.FC = () => {
                           buttonStates.startSession ||
                           !sessionData?.participants?.length
                         }
-                        sx={{ py: 1.5, px: 4 }}
+                        sx={{
+                          py: 1.5,
+                          px: 4,
+                          borderRadius: 999,
+                          textTransform: "none",
+                          fontWeight: 700,
+                          color: "#fff",
+                          background:
+                            "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                          boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+                          "&:hover": {
+                            transform: "translateY(-1px)",
+                            boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                            background:
+                              "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                          },
+                        }}
                       >
                         {buttonStates.startSession
                           ? "Starting Session..."
@@ -2207,7 +2353,15 @@ const SessionRoomMain: React.FC = () => {
         </Grid>
 
         <Grid item xs={12} md={4}>
-          <Card>
+          <Card
+            sx={{
+              borderRadius: 3,
+              border: "1px solid #e5e7eb",
+              backgroundColor: "rgba(255,255,255,0.8)",
+              backdropFilter: "blur(6px)",
+              boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+            }}
+          >
             <CardContent>
               <Typography variant="h6" gutterBottom>
                 Reading Phase
@@ -2218,7 +2372,16 @@ const SessionRoomMain: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card sx={{ mt: 2 }}>
+          <Card
+            sx={{
+              mt: 2,
+              borderRadius: 3,
+              border: "1px solid #e5e7eb",
+              backgroundColor: "rgba(255,255,255,0.8)",
+              backdropFilter: "blur(6px)",
+              boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+            }}
+          >
             <CardContent>
               <Typography variant="h6" gutterBottom>
                 Session Controls
@@ -2231,7 +2394,15 @@ const SessionRoomMain: React.FC = () => {
                     fullWidth
                     startIcon={<ImageIcon />}
                     onClick={() => setShowContentModal(true)}
-                    sx={{ py: 1.5 }}
+                    sx={{
+                      py: 1.5,
+                      borderColor: "#93c5fd",
+                      color: "#1d4ed8",
+                      "&:hover": {
+                        borderColor: "#6366f1",
+                        backgroundColor: "#eff6ff",
+                      },
+                    }}
                   >
                     Examination Findings
                   </Button>
@@ -2242,7 +2413,22 @@ const SessionRoomMain: React.FC = () => {
                   startIcon={<SkipIcon />}
                   onClick={handleSkipToConsultation}
                   disabled={buttonStates.skipToConsultation}
-                  sx={{ py: 1.5 }}
+                  sx={{
+                    py: 1.5,
+                    borderRadius: 999,
+                    textTransform: "none",
+                    fontWeight: 700,
+                    color: "#fff",
+                    background:
+                      "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                    boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+                    "&:hover": {
+                      transform: "translateY(-1px)",
+                      boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                      background:
+                        "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                    },
+                  }}
                 >
                   {buttonStates.skipToConsultation
                     ? "Skipping..."
@@ -2254,7 +2440,15 @@ const SessionRoomMain: React.FC = () => {
                   startIcon={<NewCaseIcon />}
                   onClick={handleNewCase}
                   disabled={buttonStates.newCase}
-                  sx={{ py: 1.5 }}
+                  sx={{
+                    py: 1.5,
+                    borderColor: "#93c5fd",
+                    color: "#1d4ed8",
+                    "&:hover": {
+                      borderColor: "#6366f1",
+                      backgroundColor: "#eff6ff",
+                    },
+                  }}
                 >
                   {buttonStates.newCase ? "Loading..." : "New Case"}
                 </Button>
@@ -2302,7 +2496,16 @@ const SessionRoomMain: React.FC = () => {
 
               {(sessionData?.selectedCase?.visualData?.content ||
                 sessionData?.selectedCase?.imageUrl) && (
-                <Card sx={{ mt: 2 }}>
+                <Card
+                  sx={{
+                    mt: 2,
+                    borderRadius: 3,
+                    border: "1px solid #e5e7eb",
+                    backgroundColor: "rgba(255,255,255,0.8)",
+                    backdropFilter: "blur(6px)",
+                    boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+                  }}
+                >
                   <CardContent>
                     <Typography variant="h6" gutterBottom>
                       Session Controls
@@ -2312,7 +2515,15 @@ const SessionRoomMain: React.FC = () => {
                       fullWidth
                       startIcon={<ImageIcon />}
                       onClick={() => setShowContentModal(true)}
-                      sx={{ py: 1.5 }}
+                      sx={{
+                        py: 1.5,
+                        borderColor: "#93c5fd",
+                        color: "#1d4ed8",
+                        "&:hover": {
+                          borderColor: "#6366f1",
+                          backgroundColor: "#eff6ff",
+                        },
+                      }}
                     >
                       Examination Findings
                     </Button>
@@ -2551,7 +2762,13 @@ const SessionRoomMain: React.FC = () => {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", backgroundColor: "#f5f5f5" }}>
+    <Box
+      sx={{
+        minHeight: "100vh",
+        background:
+          "linear-gradient(135deg, #eff6ff 0%, #faf5ff 50%, #fff1f2 100%)",
+      }}
+    >
       <Helmet>
         <title>{`${sessionData.title || "Session"} – PLAB 2 Practice`}</title>
         <meta name="robots" content="noindex, nofollow" />
@@ -2561,63 +2778,136 @@ const SessionRoomMain: React.FC = () => {
         />
       </Helmet>
       {/* Header */}
-      <Paper elevation={1} sx={{ p: 2, mb: 0 }}>
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <Box>
-            <Typography variant="h5" fontWeight="medium">
-              {sessionData.title}
-            </Typography>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2, mt: 1 }}>
-              <Typography variant="body2" color="text.secondary">
-                Role: {userRole?.charAt(0).toUpperCase() + userRole?.slice(1)}
+      <Paper
+        elevation={0}
+        sx={{
+          position: "sticky",
+          top: 0,
+          zIndex: 1100,
+          p: 2,
+          mb: 0,
+          backgroundColor: "rgba(255,255,255,0.9)",
+          backdropFilter: "saturate(180%) blur(10px)",
+          WebkitBackdropFilter: "saturate(180%) blur(10px)",
+          borderRadius: 0,
+          borderBottom: "1px solid #e5e7eb",
+          boxShadow: "0 6px 20px rgba(2,6,23,0.08)",
+        }}
+      >
+        <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, sm: 3, lg: 4 } }}>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Box>
+              <Typography variant="h6" fontWeight="bold" sx={{ lineHeight: 1 }}>
+                {sessionData.title}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Session: {sessionData.sessionCode}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Phase: {getPhaseLabel()}
-              </Typography>
-            </Box>
-          </Box>
-
-          {/* Participants */}
-          <AvatarGroup max={4}>
-            {sessionData.participants?.map((participant) => (
-              <Avatar
-                key={participant.id}
+              <Box
                 sx={{
-                  bgcolor: getRoleColor(participant.role),
-                  width: 32,
-                  height: 32,
-                  fontSize: "0.8rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 2.5,
+                  mt: 1,
+                  flexWrap: "wrap",
                 }}
               >
-                {participant.name?.charAt(0) || "?"}
-              </Avatar>
-            )) || []}
-          </AvatarGroup>
+                <Box
+                  sx={{
+                    px: 2,
+                    py: 0.75,
+                    borderRadius: 999,
+                    backgroundColor: "#eff6ff",
+                    border: "1px solid #bfdbfe",
+                    boxShadow: "0 1px 2px rgba(2,6,23,0.04)",
+                  }}
+                >
+                  <Typography
+                    variant="body2"
+                    sx={{ color: "#1d4ed8", fontWeight: 700 }}
+                  >
+                    Role:{" "}
+                    {userRole?.charAt(0).toUpperCase() + userRole?.slice(1)}
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    px: 2,
+                    py: 0.75,
+                    borderRadius: 999,
+                    backgroundColor: "#f5f3ff",
+                    border: "1px solid #ddd6fe",
+                    boxShadow: "0 1px 2px rgba(2,6,23,0.04)",
+                  }}
+                >
+                  <Typography
+                    variant="body2"
+                    sx={{ color: "#6d28d9", fontWeight: 700 }}
+                  >
+                    Session: {sessionData.sessionCode}
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    px: 2,
+                    py: 0.75,
+                    borderRadius: 999,
+                    backgroundColor: "#fff1f2",
+                    border: "1px solid #fecdd3",
+                    boxShadow: "0 1px 2px rgba(2,6,23,0.04)",
+                  }}
+                >
+                  <Typography
+                    variant="body2"
+                    sx={{ color: "#be123c", fontWeight: 700 }}
+                  >
+                    Phase: {getPhaseLabel()}
+                  </Typography>
+                </Box>
+              </Box>
+            </Box>
 
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <IconButton
-              aria-label={audioEnabled ? "Mute sounds" : "Unmute sounds"}
-              onClick={() => setAudioEnabled((v) => !v)}
-            >
-              {audioEnabled ? <AudioIcon /> : <MuteIcon />}
-            </IconButton>
-            <Button
-              variant="contained"
-              color="error"
-              startIcon={<ExitIcon />}
-              onClick={handleExit}
-            >
-              Exit
-            </Button>
+            {/* Participants */}
+            <AvatarGroup max={4}>
+              {sessionData.participants?.map((participant) => (
+                <Avatar
+                  key={participant.id}
+                  sx={{
+                    bgcolor: getRoleColor(participant.role),
+                    width: 32,
+                    height: 32,
+                    fontSize: "0.8rem",
+                  }}
+                >
+                  {participant.name?.charAt(0) || "?"}
+                </Avatar>
+              )) || []}
+            </AvatarGroup>
+
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <IconButton
+                aria-label={audioEnabled ? "Mute sounds" : "Unmute sounds"}
+                onClick={() => setAudioEnabled((v) => !v)}
+              >
+                {audioEnabled ? <AudioIcon /> : <MuteIcon />}
+              </IconButton>
+              <Button
+                variant="contained"
+                color="error"
+                startIcon={<ExitIcon />}
+                onClick={handleExit}
+                sx={{
+                  borderRadius: 999,
+                  textTransform: "none",
+                  fontWeight: 700,
+                }}
+              >
+                Exit
+              </Button>
+            </Box>
           </Box>
         </Box>
       </Paper>
@@ -2631,6 +2921,15 @@ const SessionRoomMain: React.FC = () => {
         onClose={() => setShowContentModal(false)}
         maxWidth="md"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            border: "1px solid #e5e7eb",
+            backgroundColor: "rgba(255,255,255,0.9)",
+            backdropFilter: "blur(6px)",
+            boxShadow: "0 10px 20px rgba(2,6,23,0.08)",
+          },
+        }}
       >
         <DialogTitle>
           <Box
@@ -2741,6 +3040,19 @@ const SessionRoomMain: React.FC = () => {
               setImageError(false); // Reset error state when closing modal
             }}
             variant="contained"
+            sx={{
+              borderRadius: 999,
+              textTransform: "none",
+              fontWeight: 700,
+              color: "#fff",
+              background: "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+              boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+              "&:hover": {
+                transform: "translateY(-1px)",
+                boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                background: "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+              },
+            }}
           >
             Close
           </Button>
@@ -2748,7 +3060,19 @@ const SessionRoomMain: React.FC = () => {
       </Dialog>
 
       {/* Exit Confirmation Dialog */}
-      <Dialog open={showExitDialog} onClose={() => setShowExitDialog(false)}>
+      <Dialog
+        open={showExitDialog}
+        onClose={() => setShowExitDialog(false)}
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            border: "1px solid #e5e7eb",
+            backgroundColor: "rgba(255,255,255,0.9)",
+            backdropFilter: "blur(6px)",
+            boxShadow: "0 10px 20px rgba(2,6,23,0.08)",
+          },
+        }}
+      >
         <DialogTitle>
           {sessionData?.phase === "feedback"
             ? "Complete Session"
@@ -2762,8 +3086,25 @@ const SessionRoomMain: React.FC = () => {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowExitDialog(false)}>Cancel</Button>
-          <Button onClick={confirmExit} color="error" variant="contained">
+          <Button
+            onClick={() => setShowExitDialog(false)}
+            variant="outlined"
+            sx={{
+              borderRadius: 999,
+              textTransform: "none",
+              borderColor: "#93c5fd",
+              color: "#1d4ed8",
+              "&:hover": { borderColor: "#6366f1", backgroundColor: "#eff6ff" },
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={confirmExit}
+            color="error"
+            variant="contained"
+            sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
+          >
             {sessionData?.phase === "feedback"
               ? "Complete My Session"
               : "Exit Session"}
@@ -2777,6 +3118,15 @@ const SessionRoomMain: React.FC = () => {
         onClose={() => setShowObserverWarningDialog(false)}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            border: "1px solid #e5e7eb",
+            backgroundColor: "rgba(255,255,255,0.9)",
+            backdropFilter: "blur(6px)",
+            boxShadow: "0 10px 20px rgba(2,6,23,0.08)",
+          },
+        }}
       >
         <DialogTitle>Observer Feedback Pending</DialogTitle>
         <DialogContent>
@@ -2786,13 +3136,36 @@ const SessionRoomMain: React.FC = () => {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleObserverWarningWait} variant="outlined">
+          <Button
+            onClick={handleObserverWarningWait}
+            variant="outlined"
+            sx={{
+              borderRadius: 999,
+              textTransform: "none",
+              borderColor: "#93c5fd",
+              color: "#1d4ed8",
+              "&:hover": { borderColor: "#6366f1", backgroundColor: "#eff6ff" },
+            }}
+          >
             Wait
           </Button>
           <Button
             onClick={handleObserverWarningContinue}
             color="primary"
             variant="contained"
+            sx={{
+              borderRadius: 999,
+              textTransform: "none",
+              fontWeight: 700,
+              color: "#fff",
+              background: "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+              boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+              "&:hover": {
+                transform: "translateY(-1px)",
+                boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                background: "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+              },
+            }}
           >
             Continue Anyway
           </Button>
@@ -2805,6 +3178,15 @@ const SessionRoomMain: React.FC = () => {
         onClose={() => {}} // Prevent closing by clicking outside
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            border: "1px solid #e5e7eb",
+            backgroundColor: "rgba(255,255,255,0.9)",
+            backdropFilter: "blur(6px)",
+            boxShadow: "0 10px 20px rgba(2,6,23,0.08)",
+          },
+        }}
       >
         <DialogTitle>🎉 Topic Completed!</DialogTitle>
         <DialogContent>
@@ -2834,7 +3216,17 @@ const SessionRoomMain: React.FC = () => {
                         key={topic}
                         variant="outlined"
                         onClick={() => handleTopicSelection(topic)}
-                        sx={{ justifyContent: "flex-start" }}
+                        sx={{
+                          justifyContent: "flex-start",
+                          borderRadius: 999,
+                          textTransform: "none",
+                          borderColor: "#93c5fd",
+                          color: "#1d4ed8",
+                          "&:hover": {
+                            borderColor: "#6366f1",
+                            backgroundColor: "#eff6ff",
+                          },
+                        }}
                       >
                         {topic}
                       </Button>
@@ -2865,6 +3257,20 @@ const SessionRoomMain: React.FC = () => {
               onClick={handleSessionEnd}
               color="primary"
               variant="contained"
+              sx={{
+                borderRadius: 999,
+                textTransform: "none",
+                fontWeight: 700,
+                color: "#fff",
+                background: "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+                "&:hover": {
+                  transform: "translateY(-1px)",
+                  boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                  background:
+                    "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                },
+              }}
             >
               {availableTopics.length > 0 ? "End Session" : "Back to Dashboard"}
             </Button>

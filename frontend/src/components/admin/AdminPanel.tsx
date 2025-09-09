@@ -523,6 +523,15 @@ const AdminPanel: React.FC = () => {
         <Dialog
           open={openCategoryDialog}
           onClose={() => setOpenCategoryDialog(false)}
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              border: "1px solid #e5e7eb",
+              backgroundColor: "rgba(255,255,255,0.9)",
+              backdropFilter: "blur(6px)",
+              boxShadow: "0 10px 20px rgba(2,6,23,0.08)",
+            },
+          }}
         >
           <DialogTitle>
             {selectedCategory ? "Edit Category" : "Add New Category"}
@@ -539,8 +548,40 @@ const AdminPanel: React.FC = () => {
             />
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setOpenCategoryDialog(false)}>Cancel</Button>
-            <Button onClick={handleCategorySubmit} variant="contained">
+            <Button
+              onClick={() => setOpenCategoryDialog(false)}
+              variant="outlined"
+              sx={{
+                borderRadius: 999,
+                textTransform: "none",
+                borderColor: "#93c5fd",
+                color: "#1d4ed8",
+                "&:hover": {
+                  borderColor: "#6366f1",
+                  backgroundColor: "#eff6ff",
+                },
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCategorySubmit}
+              variant="contained"
+              sx={{
+                borderRadius: 999,
+                textTransform: "none",
+                fontWeight: 700,
+                color: "#fff",
+                background: "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+                "&:hover": {
+                  transform: "translateY(-1px)",
+                  boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                  background:
+                    "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                },
+              }}
+            >
               Save
             </Button>
           </DialogActions>

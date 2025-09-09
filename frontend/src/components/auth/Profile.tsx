@@ -20,6 +20,16 @@ import { RootState } from "../../store";
 import { updateUser } from "../../features/auth/authSlice";
 import { api } from "../../services/api";
 
+const inputOutlineSx = {
+  "& .MuiOutlinedInput-root": {
+    borderRadius: 2,
+    "& fieldset": { borderColor: "#93c5fd" },
+    "&:hover fieldset": { borderColor: "#6366f1" },
+    "&.Mui-focused fieldset": { borderColor: "#3b82f6", borderWidth: 2 },
+  },
+  "& .MuiInputLabel-root.Mui-focused": { color: "#3b82f6" },
+};
+
 const Profile: React.FC = () => {
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
@@ -124,160 +134,79 @@ const Profile: React.FC = () => {
   }, [passwordMessage, passwordError]);
 
   return (
-    <Container maxWidth="md">
-      <Box sx={{ mt: 4, mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          My Profile
-        </Typography>
+    <Box
+      sx={{
+        minHeight: "calc(100vh - 64px)",
+        background:
+          "linear-gradient(135deg, #eff6ff 0%, #faf5ff 50%, #fff1f2 100%)",
+        py: 6,
+      }}
+    >
+      <Container maxWidth="md">
+        <Box sx={{ mt: 2, mb: 2 }}>
+          <Typography variant="h4" component="h1" gutterBottom>
+            My Profile
+          </Typography>
 
-        <Stack spacing={3}>
-          {/* Profile Information */}
-          <Paper elevation={1}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                  <Person sx={{ mr: 1 }} />
-                  <Typography variant="h6">Profile Information</Typography>
-                </Box>
-
-                {profileMessage && (
-                  <Alert severity="success" sx={{ mb: 2 }}>
-                    {profileMessage}
-                  </Alert>
-                )}
-
-                {profileError && (
-                  <Alert severity="error" sx={{ mb: 2 }}>
-                    {profileError}
-                  </Alert>
-                )}
-
-                <form onSubmit={profileFormik.handleSubmit}>
-                  <Stack spacing={2}>
-                    <TextField
-                      fullWidth
-                      id="name"
-                      name="name"
-                      label="Full Name"
-                      value={profileFormik.values.name}
-                      onChange={profileFormik.handleChange}
-                      onBlur={profileFormik.handleBlur}
-                      error={
-                        profileFormik.touched.name &&
-                        Boolean(profileFormik.errors.name)
-                      }
-                      helperText={
-                        profileFormik.touched.name && profileFormik.errors.name
-                      }
-                    />
-
-                    <TextField
-                      fullWidth
-                      label="Email"
-                      value={user?.email || ""}
-                      disabled
-                      helperText="Email cannot be changed"
-                    />
-
-                    <Box sx={{ pt: 1 }}>
-                      <Button
-                        type="submit"
-                        variant="contained"
-                        disabled={
-                          profileFormik.isSubmitting || !profileFormik.isValid
-                        }
-                        sx={{ minWidth: 120 }}
-                      >
-                        {profileFormik.isSubmitting
-                          ? "Updating..."
-                          : "Update Profile"}
-                      </Button>
-                    </Box>
-                  </Stack>
-                </form>
-              </CardContent>
-            </Card>
-          </Paper>
-
-          {/* Password Change */}
-          {user?.provider === "LOCAL" && (
-            <Paper elevation={1}>
+          <Stack spacing={3}>
+            {/* Profile Information */}
+            <Paper
+              elevation={0}
+              sx={{
+                border: "1px solid #e5e7eb",
+                borderRadius: 3,
+                backgroundColor: "rgba(255,255,255,0.8)",
+                backdropFilter: "blur(6px)",
+                boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+              }}
+            >
               <Card>
                 <CardContent>
                   <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                    <Lock sx={{ mr: 1 }} />
-                    <Typography variant="h6">Change Password</Typography>
+                    <Person sx={{ mr: 1 }} />
+                    <Typography variant="h6">Profile Information</Typography>
                   </Box>
 
-                  {passwordMessage && (
+                  {profileMessage && (
                     <Alert severity="success" sx={{ mb: 2 }}>
-                      {passwordMessage}
+                      {profileMessage}
                     </Alert>
                   )}
 
-                  {passwordError && (
+                  {profileError && (
                     <Alert severity="error" sx={{ mb: 2 }}>
-                      {passwordError}
+                      {profileError}
                     </Alert>
                   )}
 
-                  <form onSubmit={passwordFormik.handleSubmit}>
+                  <form onSubmit={profileFormik.handleSubmit}>
                     <Stack spacing={2}>
                       <TextField
                         fullWidth
-                        id="currentPassword"
-                        name="currentPassword"
-                        label="Current Password"
-                        type="password"
-                        value={passwordFormik.values.currentPassword}
-                        onChange={passwordFormik.handleChange}
-                        onBlur={passwordFormik.handleBlur}
+                        id="name"
+                        name="name"
+                        label="Full Name"
+                        value={profileFormik.values.name}
+                        onChange={profileFormik.handleChange}
+                        onBlur={profileFormik.handleBlur}
                         error={
-                          passwordFormik.touched.currentPassword &&
-                          Boolean(passwordFormik.errors.currentPassword)
+                          profileFormik.touched.name &&
+                          Boolean(profileFormik.errors.name)
                         }
                         helperText={
-                          passwordFormik.touched.currentPassword &&
-                          passwordFormik.errors.currentPassword
+                          profileFormik.touched.name &&
+                          profileFormik.errors.name
                         }
+                        sx={inputOutlineSx}
                       />
 
                       <TextField
                         fullWidth
-                        id="newPassword"
-                        name="newPassword"
-                        label="New Password"
-                        type="password"
-                        value={passwordFormik.values.newPassword}
-                        onChange={passwordFormik.handleChange}
-                        onBlur={passwordFormik.handleBlur}
-                        error={
-                          passwordFormik.touched.newPassword &&
-                          Boolean(passwordFormik.errors.newPassword)
-                        }
-                        helperText={
-                          passwordFormik.touched.newPassword &&
-                          passwordFormik.errors.newPassword
-                        }
-                      />
-
-                      <TextField
-                        fullWidth
-                        id="confirmPassword"
-                        name="confirmPassword"
-                        label="Confirm New Password"
-                        type="password"
-                        value={passwordFormik.values.confirmPassword}
-                        onChange={passwordFormik.handleChange}
-                        onBlur={passwordFormik.handleBlur}
-                        error={
-                          passwordFormik.touched.confirmPassword &&
-                          Boolean(passwordFormik.errors.confirmPassword)
-                        }
-                        helperText={
-                          passwordFormik.touched.confirmPassword &&
-                          passwordFormik.errors.confirmPassword
-                        }
+                        label="Email"
+                        value={user?.email || ""}
+                        disabled
+                        helperText="Email cannot be changed"
+                        sx={inputOutlineSx}
                       />
 
                       <Box sx={{ pt: 1 }}>
@@ -285,14 +214,28 @@ const Profile: React.FC = () => {
                           type="submit"
                           variant="contained"
                           disabled={
-                            passwordFormik.isSubmitting ||
-                            !passwordFormik.isValid
+                            profileFormik.isSubmitting || !profileFormik.isValid
                           }
-                          sx={{ minWidth: 120 }}
+                          sx={{
+                            minWidth: 160,
+                            borderRadius: 999,
+                            textTransform: "none",
+                            fontWeight: 700,
+                            color: "#fff",
+                            background:
+                              "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                            boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+                            "&:hover": {
+                              transform: "translateY(-1px)",
+                              boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                              background:
+                                "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                            },
+                          }}
                         >
-                          {passwordFormik.isSubmitting
-                            ? "Changing..."
-                            : "Change Password"}
+                          {profileFormik.isSubmitting
+                            ? "Updating..."
+                            : "Update Profile"}
                         </Button>
                       </Box>
                     </Stack>
@@ -300,10 +243,140 @@ const Profile: React.FC = () => {
                 </CardContent>
               </Card>
             </Paper>
-          )}
-        </Stack>
-      </Box>
-    </Container>
+
+            {/* Password Change */}
+            {user?.provider === "LOCAL" && (
+              <Paper
+                elevation={0}
+                sx={{
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 3,
+                  backgroundColor: "rgba(255,255,255,0.8)",
+                  backdropFilter: "blur(6px)",
+                  boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+                }}
+              >
+                <Card>
+                  <CardContent>
+                    <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                      <Lock sx={{ mr: 1 }} />
+                      <Typography variant="h6">Change Password</Typography>
+                    </Box>
+
+                    {passwordMessage && (
+                      <Alert severity="success" sx={{ mb: 2 }}>
+                        {passwordMessage}
+                      </Alert>
+                    )}
+
+                    {passwordError && (
+                      <Alert severity="error" sx={{ mb: 2 }}>
+                        {passwordError}
+                      </Alert>
+                    )}
+
+                    <form onSubmit={passwordFormik.handleSubmit}>
+                      <Stack spacing={2}>
+                        <TextField
+                          fullWidth
+                          id="currentPassword"
+                          name="currentPassword"
+                          label="Current Password"
+                          type="password"
+                          value={passwordFormik.values.currentPassword}
+                          onChange={passwordFormik.handleChange}
+                          onBlur={passwordFormik.handleBlur}
+                          error={
+                            passwordFormik.touched.currentPassword &&
+                            Boolean(passwordFormik.errors.currentPassword)
+                          }
+                          helperText={
+                            passwordFormik.touched.currentPassword &&
+                            passwordFormik.errors.currentPassword
+                          }
+                          sx={inputOutlineSx}
+                        />
+
+                        <TextField
+                          fullWidth
+                          id="newPassword"
+                          name="newPassword"
+                          label="New Password"
+                          type="password"
+                          value={passwordFormik.values.newPassword}
+                          onChange={passwordFormik.handleChange}
+                          onBlur={passwordFormik.handleBlur}
+                          error={
+                            passwordFormik.touched.newPassword &&
+                            Boolean(passwordFormik.errors.newPassword)
+                          }
+                          helperText={
+                            passwordFormik.touched.newPassword &&
+                            passwordFormik.errors.newPassword
+                          }
+                          sx={inputOutlineSx}
+                        />
+
+                        <TextField
+                          fullWidth
+                          id="confirmPassword"
+                          name="confirmPassword"
+                          label="Confirm New Password"
+                          type="password"
+                          value={passwordFormik.values.confirmPassword}
+                          onChange={passwordFormik.handleChange}
+                          onBlur={passwordFormik.handleBlur}
+                          error={
+                            passwordFormik.touched.confirmPassword &&
+                            Boolean(passwordFormik.errors.confirmPassword)
+                          }
+                          helperText={
+                            passwordFormik.touched.confirmPassword &&
+                            passwordFormik.errors.confirmPassword
+                          }
+                          sx={inputOutlineSx}
+                        />
+
+                        <Box sx={{ pt: 1 }}>
+                          <Button
+                            type="submit"
+                            variant="contained"
+                            disabled={
+                              passwordFormik.isSubmitting ||
+                              !passwordFormik.isValid
+                            }
+                            sx={{
+                              minWidth: 160,
+                              borderRadius: 999,
+                              textTransform: "none",
+                              fontWeight: 700,
+                              color: "#fff",
+                              background:
+                                "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                              boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+                              "&:hover": {
+                                transform: "translateY(-1px)",
+                                boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                                background:
+                                  "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                              },
+                            }}
+                          >
+                            {passwordFormik.isSubmitting
+                              ? "Changing..."
+                              : "Change Password"}
+                          </Button>
+                        </Box>
+                      </Stack>
+                    </form>
+                  </CardContent>
+                </Card>
+              </Paper>
+            )}
+          </Stack>
+        </Box>
+      </Container>
+    </Box>
   );
 };
 

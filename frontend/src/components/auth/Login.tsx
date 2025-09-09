@@ -21,6 +21,17 @@ import { api } from "../../services/api";
 import GoogleSignInButton from "./GoogleSignInButton";
 import { Helmet } from "react-helmet-async";
 
+// Shared input outline style to match new design language
+const inputOutlineSx = {
+  "& .MuiOutlinedInput-root": {
+    borderRadius: 2,
+    "& fieldset": { borderColor: "#93c5fd" },
+    "&:hover fieldset": { borderColor: "#6366f1" },
+    "&.Mui-focused fieldset": { borderColor: "#3b82f6", borderWidth: 2 },
+  },
+  "& .MuiInputLabel-root.Mui-focused": { color: "#3b82f6" },
+};
+
 // Google Sign-In types
 declare global {
   interface Window {
@@ -234,132 +245,170 @@ const Login: React.FC = () => {
   };
 
   return (
-    <Container maxWidth="sm">
-      <Helmet>
-        <title>Login – PLAB 2 Practice</title>
-        <meta name="robots" content="noindex, follow" />
-        <link rel="canonical" href="https://plab2practice.com/login" />
-      </Helmet>
-      <Box
-        sx={{
-          marginTop: 8,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-        }}
-      >
-        <Card sx={{ width: "100%", maxWidth: 400 }}>
-          <CardContent sx={{ p: 4 }}>
-            <Typography
-              component="h1"
-              variant="h4"
-              align="center"
-              gutterBottom
-              sx={{ mb: 3 }}
-            >
-              Sign In
-            </Typography>
-
-            {successMessage && (
-              <Alert severity="success" sx={{ mb: 2 }}>
-                {successMessage}
-              </Alert>
-            )}
-
-            {error && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {error}
-              </Alert>
-            )}
-
-            <form onSubmit={formik.handleSubmit}>
-              <Stack spacing={2}>
-                <TextField
-                  fullWidth
-                  id="email"
-                  name="email"
-                  label="Email"
-                  value={formik.values.email}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  error={formik.touched.email && Boolean(formik.errors.email)}
-                  helperText={formik.touched.email && formik.errors.email}
-                />
-
-                <TextField
-                  fullWidth
-                  id="password"
-                  name="password"
-                  label="Password"
-                  type="password"
-                  value={formik.values.password}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  error={
-                    formik.touched.password && Boolean(formik.errors.password)
-                  }
-                  helperText={formik.touched.password && formik.errors.password}
-                />
-
-                <Button
-                  type="submit"
-                  fullWidth
-                  variant="contained"
-                  disabled={formik.isSubmitting}
-                  sx={{ mt: 2, mb: 1 }}
-                >
-                  {formik.isSubmitting ? "Signing In..." : "Sign In"}
-                </Button>
-              </Stack>
-            </form>
-
-            <Box sx={{ textAlign: "center", mt: 2, mb: 2 }}>
-              <Link
-                component={RouterLink}
-                to="/forgot-password"
-                variant="body2"
+    <Box
+      sx={{
+        minHeight: "calc(100vh - 64px)",
+        background:
+          "linear-gradient(135deg, #eff6ff 0%, #faf5ff 50%, #fff1f2 100%)",
+        py: 8,
+      }}
+    >
+      <Container maxWidth="sm">
+        <Helmet>
+          <title>Login – PLAB 2 Practice</title>
+          <meta name="robots" content="noindex, follow" />
+          <link rel="canonical" href="https://plab2practice.com/login" />
+        </Helmet>
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+          }}
+        >
+          <Card
+            sx={{
+              width: "100%",
+              maxWidth: 400,
+              border: "1px solid #e5e7eb",
+              borderRadius: 3,
+              backgroundColor: "rgba(255,255,255,0.8)",
+              backdropFilter: "blur(6px)",
+              boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+            }}
+          >
+            <CardContent sx={{ p: 4 }}>
+              <Typography
+                component="h1"
+                variant="h4"
+                align="center"
+                gutterBottom
+                sx={{ mb: 3 }}
               >
-                Forgot password?
-              </Link>
-            </Box>
-
-            <Divider sx={{ my: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                OR
+                Sign In
               </Typography>
-            </Divider>
 
-            {/* Hidden Google button for actual functionality */}
-            <Box
-              ref={googleButtonRef}
-              sx={{
-                position: "absolute",
-                top: -9999,
-                left: -9999,
-                visibility: "hidden",
-              }}
-            />
+              {successMessage && (
+                <Alert severity="success" sx={{ mb: 2 }}>
+                  {successMessage}
+                </Alert>
+              )}
 
-            <Box sx={{ mb: 2 }}>
-              <GoogleSignInButton
-                onClick={handleGoogleSignIn}
-                disabled={!isGoogleScriptLoaded}
-                isLoading={isGoogleLoading}
-              />
-            </Box>
+              {error && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {error}
+                </Alert>
+              )}
 
-            <Box sx={{ textAlign: "center", mt: 2 }}>
-              <Typography variant="body2">
-                Don't have an account?{" "}
-                <Link component={RouterLink} to="/register" variant="body2">
-                  Sign up
+              <form onSubmit={formik.handleSubmit}>
+                <Stack spacing={2}>
+                  <TextField
+                    fullWidth
+                    id="email"
+                    name="email"
+                    label="Email"
+                    value={formik.values.email}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    error={formik.touched.email && Boolean(formik.errors.email)}
+                    helperText={formik.touched.email && formik.errors.email}
+                    sx={inputOutlineSx}
+                  />
+
+                  <TextField
+                    fullWidth
+                    id="password"
+                    name="password"
+                    label="Password"
+                    type="password"
+                    value={formik.values.password}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    error={
+                      formik.touched.password && Boolean(formik.errors.password)
+                    }
+                    helperText={
+                      formik.touched.password && formik.errors.password
+                    }
+                    sx={inputOutlineSx}
+                  />
+
+                  <Button
+                    type="submit"
+                    fullWidth
+                    variant="contained"
+                    disabled={formik.isSubmitting}
+                    sx={{
+                      mt: 2,
+                      mb: 1,
+                      borderRadius: 999,
+                      textTransform: "none",
+                      fontWeight: 700,
+                      color: "#fff",
+                      background:
+                        "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                      boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+                      "&:hover": {
+                        transform: "translateY(-1px)",
+                        boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                        background:
+                          "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                      },
+                    }}
+                  >
+                    {formik.isSubmitting ? "Signing In..." : "Sign In"}
+                  </Button>
+                </Stack>
+              </form>
+
+              <Box sx={{ textAlign: "center", mt: 2, mb: 2 }}>
+                <Link
+                  component={RouterLink}
+                  to="/forgot-password"
+                  variant="body2"
+                >
+                  Forgot password?
                 </Link>
-              </Typography>
-            </Box>
-          </CardContent>
-        </Card>
-      </Box>
-    </Container>
+              </Box>
+
+              <Divider sx={{ my: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  OR
+                </Typography>
+              </Divider>
+
+              {/* Hidden Google button for actual functionality */}
+              <Box
+                ref={googleButtonRef}
+                sx={{
+                  position: "absolute",
+                  top: -9999,
+                  left: -9999,
+                  visibility: "hidden",
+                }}
+              />
+
+              <Box sx={{ mb: 2 }}>
+                <GoogleSignInButton
+                  onClick={handleGoogleSignIn}
+                  disabled={!isGoogleScriptLoaded}
+                  isLoading={isGoogleLoading}
+                />
+              </Box>
+
+              <Box sx={{ textAlign: "center", mt: 2 }}>
+                <Typography variant="body2">
+                  Don't have an account?{" "}
+                  <Link component={RouterLink} to="/register" variant="body2">
+                    Sign up
+                  </Link>
+                </Typography>
+              </Box>
+            </CardContent>
+          </Card>
+        </Box>
+      </Container>
+    </Box>
   );
 };
 
