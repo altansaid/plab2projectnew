@@ -2344,56 +2344,104 @@ const SessionRoomMain: React.FC = () => {
 
   const DoctorReadingView = memo(() => {
     return (
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={8}>
-          <PatientInformationCard
-            userRole="doctor"
-            selectedCase={sessionData?.selectedCase}
-          />
-        </Grid>
+      <Container maxWidth="lg">
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={8}>
+            <PatientInformationCard
+              userRole="doctor"
+              selectedCase={sessionData?.selectedCase}
+            />
+          </Grid>
 
-        <Grid item xs={12} md={4}>
-          <Card
-            sx={{
-              borderRadius: 3,
-              border: "1px solid #e5e7eb",
-              backgroundColor: "rgba(255,255,255,0.8)",
-              backdropFilter: "blur(6px)",
-              boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
-            }}
-          >
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Reading Phase
-              </Typography>
-              <Typography variant="body2" color="text.secondary" paragraph>
-                Review the patient information and prepare for the consultation
-              </Typography>
-            </CardContent>
-          </Card>
+          <Grid item xs={12} md={4}>
+            <Card
+              sx={{
+                borderRadius: 3,
+                border: "1px solid #e5e7eb",
+                backgroundColor: "rgba(255,255,255,0.8)",
+                backdropFilter: "blur(6px)",
+                boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+              }}
+            >
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Reading Phase
+                </Typography>
+                <Typography variant="body2" color="text.secondary" paragraph>
+                  Review the patient information and prepare for the
+                  consultation
+                </Typography>
+              </CardContent>
+            </Card>
 
-          <Card
-            sx={{
-              mt: 2,
-              borderRadius: 3,
-              border: "1px solid #e5e7eb",
-              backgroundColor: "rgba(255,255,255,0.8)",
-              backdropFilter: "blur(6px)",
-              boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
-            }}
-          >
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Session Controls
-              </Typography>
-              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                {(sessionData?.selectedCase?.visualData?.content ||
-                  sessionData?.selectedCase?.imageUrl) && (
+            <Card
+              sx={{
+                mt: 2,
+                borderRadius: 3,
+                border: "1px solid #e5e7eb",
+                backgroundColor: "rgba(255,255,255,0.8)",
+                backdropFilter: "blur(6px)",
+                boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+              }}
+            >
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Session Controls
+                </Typography>
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                  {(sessionData?.selectedCase?.visualData?.content ||
+                    sessionData?.selectedCase?.imageUrl) && (
+                    <Button
+                      variant="outlined"
+                      fullWidth
+                      startIcon={<ImageIcon />}
+                      onClick={() => setShowContentModal(true)}
+                      sx={{
+                        py: 1.5,
+                        borderColor: "#93c5fd",
+                        color: "#1d4ed8",
+                        "&:hover": {
+                          borderColor: "#6366f1",
+                          backgroundColor: "#eff6ff",
+                        },
+                      }}
+                    >
+                      Examination Findings
+                    </Button>
+                  )}
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    startIcon={<SkipIcon />}
+                    onClick={handleSkipToConsultation}
+                    disabled={buttonStates.skipToConsultation}
+                    sx={{
+                      py: 1.5,
+                      borderRadius: 999,
+                      textTransform: "none",
+                      fontWeight: 700,
+                      color: "#fff",
+                      background:
+                        "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
+                      boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
+                      "&:hover": {
+                        transform: "translateY(-1px)",
+                        boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
+                        background:
+                          "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                      },
+                    }}
+                  >
+                    {buttonStates.skipToConsultation
+                      ? "Skipping..."
+                      : "Skip to Consultation"}
+                  </Button>
                   <Button
                     variant="outlined"
                     fullWidth
-                    startIcon={<ImageIcon />}
-                    onClick={() => setShowContentModal(true)}
+                    startIcon={<NewCaseIcon />}
+                    onClick={handleNewCase}
+                    disabled={buttonStates.newCase}
                     sx={{
                       py: 1.5,
                       borderColor: "#93c5fd",
@@ -2404,59 +2452,14 @@ const SessionRoomMain: React.FC = () => {
                       },
                     }}
                   >
-                    Examination Findings
+                    {buttonStates.newCase ? "Loading..." : "New Case"}
                   </Button>
-                )}
-                <Button
-                  variant="contained"
-                  fullWidth
-                  startIcon={<SkipIcon />}
-                  onClick={handleSkipToConsultation}
-                  disabled={buttonStates.skipToConsultation}
-                  sx={{
-                    py: 1.5,
-                    borderRadius: 999,
-                    textTransform: "none",
-                    fontWeight: 700,
-                    color: "#fff",
-                    background:
-                      "linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)",
-                    boxShadow: "0 10px 20px rgba(59,130,246,0.25)",
-                    "&:hover": {
-                      transform: "translateY(-1px)",
-                      boxShadow: "0 14px 24px rgba(59,130,246,0.3)",
-                      background:
-                        "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
-                    },
-                  }}
-                >
-                  {buttonStates.skipToConsultation
-                    ? "Skipping..."
-                    : "Skip to Consultation"}
-                </Button>
-                <Button
-                  variant="outlined"
-                  fullWidth
-                  startIcon={<NewCaseIcon />}
-                  onClick={handleNewCase}
-                  disabled={buttonStates.newCase}
-                  sx={{
-                    py: 1.5,
-                    borderColor: "#93c5fd",
-                    color: "#1d4ed8",
-                    "&:hover": {
-                      borderColor: "#6366f1",
-                      backgroundColor: "#eff6ff",
-                    },
-                  }}
-                >
-                  {buttonStates.newCase ? "Loading..." : "New Case"}
-                </Button>
-              </Box>
-            </CardContent>
-          </Card>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
         </Grid>
-      </Grid>
+      </Container>
     );
   });
 
@@ -2783,7 +2786,7 @@ const SessionRoomMain: React.FC = () => {
         sx={{
           position: "sticky",
           top: 0,
-          zIndex: 1100,
+          zIndex: 1000,
           p: 2,
           mb: 0,
           backgroundColor: "rgba(255,255,255,0.9)",

@@ -86,7 +86,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       </div>
       {/* Navigation - Tailwind-based, inspired by Sample.tsx */}
       <nav
-        className={`sticky top-0 z-50 transition-all duration-300 ${
+        className={`sticky top-0 z-[1201] transition-all duration-300 ${
           scrolled
             ? "bg-white/95 backdrop-blur-md shadow-lg"
             : "bg-white/80 backdrop-blur"
@@ -128,7 +128,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   </button>
                   {/* User dropdown */}
                   {isUserMenuOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
+                    <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-[1300]">
                       {user?.role === "ADMIN" && (
                         <button
                           onClick={handleAdmin}
