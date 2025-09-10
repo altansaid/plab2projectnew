@@ -128,7 +128,7 @@ const HomePage: React.FC = () => {
                   <div className="text-center w-full h-full">
                     <iframe
                       className="w-full h-full rounded-xl"
-                      src="https://www.youtube.com/embed/_QT3yEareTo?si=T8Dp4Z9E97i7BbiT"
+                      src="https://www.youtube.com/embed/UoKrJJFdR7I?si=K7_mQBwYZBktS5qI"
                       title="YouTube video player"
                       frameBorder="0"
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
