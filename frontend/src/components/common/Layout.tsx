@@ -74,7 +74,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               with others preparing for PLAB 2!
             </span>
             <a
-              href="https://discord.gg/6edjtb9gXX"
+              href="https://discord.gg/Ymv4KEWZEp"
               target="_blank"
               rel="noopener noreferrer"
               className="sm:ml-2 underline font-semibold hover:text-white/90"
