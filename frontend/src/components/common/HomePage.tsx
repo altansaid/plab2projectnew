@@ -22,9 +22,9 @@ const HomePage: React.FC = () => {
 
   const handleStartSession = () => {
     if (isAuthenticated) {
-      navigate("/session/create");
+      navigate("/session/configure");
     } else {
-      sessionStorage.setItem("redirectAfterLogin", "/session/create");
+      sessionStorage.setItem("redirectAfterLogin", "/session/configure");
       navigate("/login");
     }
   };
@@ -90,39 +90,46 @@ const HomePage: React.FC = () => {
       {/* Hero Section - Sample.tsx inspired */}
       <section className="pt-12 sm:pt-16 md:pt-20 pb-12 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 overflow-hidden">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Badge centered at top */}
           <div className="text-center mb-10 sm:mb-14">
-            {/* Badge */}
             <div className="inline-flex items-center px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full border border-purple-400 mb-8 hover:shadow-md transition-all duration-300">
               <Star className="h-4 w-4 text-yellow-500 mr-2" />
               <span className="text-sm font-medium text-gray-700">
                 Trusted by PLAB 2 Candidates
               </span>
             </div>
-            <h1 className="text-3xl sm:text-4xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
-              Prepare for Your{" "}
-              <span className="bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
-                PLAB 2
-              </span>{" "}
-              Exam – 100% Free
-            </h1>
+          </div>
 
-            <p className="text-lg sm:text-xl text-gray-600 mb-8 max-w-3xl mx-auto leading-relaxed">
-              Practice real scenarios, get structured feedback, and track your
-              progress — all on a modern platform, completely free of charge.
-            </p>
+          {/* Two column layout: Text + Video */}
+          <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+            {/* Left Column - Text Content */}
+            <div className="text-center lg:text-left">
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-gray-900 mb-6 leading-tight">
+                Prepare for Your{" "}
+                <span className="bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
+                  PLAB 2
+                </span>{" "}
+                Exam – 100% Free
+              </h1>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-10">
-              <button
-                onClick={handleStartSession}
-                className="group bg-gradient-to-r from-blue-500 to-purple-600 text-white px-7 sm:px-8 py-3 sm:py-4 rounded-full font-semibold text-base sm:text-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 flex items-center"
-              >
-                Start Practicing Today
-                <ChevronRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-              </button>
-              {/* Secondary action removed per request */}
+              <p className="text-lg sm:text-xl text-gray-600 mb-8 leading-relaxed">
+                Practice real scenarios, get structured feedback, and track your
+                progress — all on a modern platform, completely free of charge.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start items-center">
+                <button
+                  onClick={handleStartSession}
+                  className="group bg-gradient-to-r from-blue-500 to-purple-600 text-white px-7 sm:px-8 py-3 sm:py-4 rounded-full font-semibold text-base sm:text-lg hover:shadow-2xl hover:scale-105 transition-all duration-300 flex items-center"
+                >
+                  Start Practicing Today
+                  <ChevronRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                </button>
+              </div>
             </div>
 
-            <div className="relative max-w-4xl mx-auto">
+            {/* Right Column - Video */}
+            <div className="relative">
               <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-r from-blue-500 to-purple-600 p-1 hover:shadow-3xl transition-shadow duration-500">
                 <div className="bg-gray-900 rounded-xl aspect-video flex items-center justify-center">
                   <div className="text-center w-full h-full">

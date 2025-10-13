@@ -43,10 +43,10 @@ public class Session {
     private SessionType sessionType = SessionType.TOPIC;
 
     @Column(name = "reading_time_minutes", nullable = false)
-    private Integer readingTime = 2; // in minutes
+    private Double readingTime = 2.0; // in minutes
 
     @Column(name = "consultation_time_minutes", nullable = false)
-    private Integer consultationTime = 8; // in minutes
+    private Double consultationTime = 8.0; // in minutes
 
     @Enumerated(EnumType.STRING)
     @Column(name = "timing_type", nullable = false)

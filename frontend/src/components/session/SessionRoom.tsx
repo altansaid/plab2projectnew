@@ -930,7 +930,16 @@ const PatientInformationCard: React.FC<PatientInformationCardProps> = ({
         boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
       }}
     >
-      <CardContent>
+      <CardContent
+        onCopy={(e) => e.preventDefault()}
+        onContextMenu={(e) => e.preventDefault()}
+        sx={{
+          userSelect: "none",
+          WebkitUserSelect: "none",
+          MozUserSelect: "none",
+          msUserSelect: "none",
+        }}
+      >
         <Box>
           {userRole.toLowerCase() !== "doctor" && (
             <Typography variant="h6" gutterBottom>
@@ -1015,7 +1024,7 @@ const PatientInformationCard: React.FC<PatientInformationCardProps> = ({
             <CloseIcon />
           </IconButton>
         </DialogTitle>
-        <DialogContent sx={{ p: 0 }}>
+        <DialogContent sx={{ p: 0 }} onContextMenu={(e) => e.preventDefault()}>
           <Box
             component="img"
             src={selectedCase.imageUrl}
@@ -1024,7 +1033,13 @@ const PatientInformationCard: React.FC<PatientInformationCardProps> = ({
               width: "100%",
               height: "auto",
               display: "block",
+              userSelect: "none",
+              WebkitUserSelect: "none",
+              MozUserSelect: "none",
+              msUserSelect: "none",
+              pointerEvents: "none",
             }}
+            onDragStart={(e: any) => e.preventDefault()}
           />
         </DialogContent>
       </Dialog>
@@ -2950,7 +2965,16 @@ const SessionRoomMain: React.FC = () => {
             </IconButton>
           </Box>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent
+          onCopy={(e) => e.preventDefault()}
+          onContextMenu={(e) => e.preventDefault()}
+          sx={{
+            userSelect: "none",
+            WebkitUserSelect: "none",
+            MozUserSelect: "none",
+            msUserSelect: "none",
+          }}
+        >
           <Box display="flex" justifyContent="center" alignItems="center" p={2}>
             {(() => {
               const visualData = sessionData?.selectedCase?.visualData;
@@ -2988,10 +3012,12 @@ const SessionRoomMain: React.FC = () => {
                       maxWidth: "100%",
                       maxHeight: "70vh",
                       objectFit: "contain",
+                      pointerEvents: "none",
                     }}
                     onError={() => {
                       setImageError(true);
                     }}
+                    onDragStart={(e) => e.preventDefault()}
                   />
                 ) : (
                   <Box

@@ -139,9 +139,9 @@ public class SessionWebSocketService {
         if (sessionOpt.isPresent()) {
             Session session = sessionOpt.get();
             if (phase.equalsIgnoreCase("CONSULTATION")) {
-                message.put("durationSeconds", session.getConsultationTime() * 60);
+                message.put("durationSeconds", (int) (session.getConsultationTime() * 60));
             } else if (phase.equalsIgnoreCase("READING")) {
-                message.put("durationSeconds", session.getReadingTime() * 60);
+                message.put("durationSeconds", (int) (session.getReadingTime() * 60));
             }
         }
 
@@ -249,7 +249,7 @@ public class SessionWebSocketService {
                 startTimer(session.getCode());
             } else {
                 // Start a timer for feedback phase (e.g., 10 minutes max for feedback)
-                scheduleFeedbackTimeout(session.getCode(), 10 * 60); // 10 minutes
+                scheduleFeedbackTimeout(session.getCode(), 20 * 60); // 10 minutes
             }
         }
     }
@@ -493,9 +493,9 @@ public class SessionWebSocketService {
 
     private int getCurrentPhaseTime(Session session) {
         if (session.getPhase() == Session.Phase.READING) {
-            return session.getReadingTime() * 60;
+            return (int) (session.getReadingTime() * 60);
         } else if (session.getPhase() == Session.Phase.CONSULTATION) {
-            return session.getConsultationTime() * 60;
+            return (int) (session.getConsultationTime() * 60);
         }
         return 0;
     }

@@ -35,6 +35,7 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/session/create" element={<SessionCreateSimple />} />
+          <Route path="/session/configure" element={<ConfigureSession />} />
           <Route path="/session/join" element={<SessionJoin />} />
           <Route
             path="/session/:sessionCode/configure"

@@ -113,7 +113,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                     Join Session
                   </button>
                   <button
-                    onClick={() => navigate("/session/create")}
+                    onClick={() => navigate("/session/configure")}
                     className="text-gray-600 hover:text-blue-600 transition-colors"
                   >
                     Start Session
@@ -212,7 +212,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   </button>
                   <button
                     onClick={() => {
-                      navigate("/session/create");
+                      navigate("/session/configure");
                       setIsMobileMenuOpen(false);
                     }}
                     className="block w-full text-left px-2 py-3 text-gray-600 hover:text-blue-600"

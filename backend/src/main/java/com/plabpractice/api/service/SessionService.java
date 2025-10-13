@@ -152,8 +152,8 @@ public class SessionService {
         return sessionRepository.findByStatus(Session.Status.IN_PROGRESS);
     }
 
-    public Session createSessionWithConfig(String title, String sessionType, Integer readingTime,
-            Integer consultationTime, String timingType,
+    public Session createSessionWithConfig(String title, String sessionType, Double readingTime,
+            Double consultationTime, String timingType,
             List<String> selectedTopics, User creator) {
         Session session = new Session();
         session.setTitle(title);
@@ -297,16 +297,15 @@ public class SessionService {
         if (config.containsKey("readingTime")) {
             Object readingTimeObj = config.get("readingTime");
             if (readingTimeObj instanceof Number) {
-                // Accept Double/Integer seamlessly; round to nearest minute since backend
-                // stores minutes
-                int readingMinutes = (int) Math.round(((Number) readingTimeObj).doubleValue());
+                // Accept Double/Integer seamlessly - no rounding needed
+                double readingMinutes = ((Number) readingTimeObj).doubleValue();
                 session.setReadingTime(readingMinutes);
             }
         }
         if (config.containsKey("consultationTime")) {
             Object consultationTimeObj = config.get("consultationTime");
             if (consultationTimeObj instanceof Number) {
-                int consultationMinutes = (int) Math.round(((Number) consultationTimeObj).doubleValue());
+                double consultationMinutes = ((Number) consultationTimeObj).doubleValue();
                 session.setConsultationTime(consultationMinutes);
             }
         }
@@ -492,10 +491,10 @@ public class SessionService {
         int totalTimeSeconds = 0;
         switch (phase) {
             case READING:
-                totalTimeSeconds = session.getReadingTime() * 60;
+                totalTimeSeconds = (int) (session.getReadingTime() * 60);
                 break;
             case CONSULTATION:
-                totalTimeSeconds = session.getConsultationTime() * 60;
+                totalTimeSeconds = (int) (session.getConsultationTime() * 60);
                 break;
             default:
                 totalTimeSeconds = 0;
@@ -520,10 +519,10 @@ public class SessionService {
         int totalTimeSeconds = 0;
         switch (session.getPhase()) {
             case READING:
-                totalTimeSeconds = session.getReadingTime() * 60;
+                totalTimeSeconds = (int) (session.getReadingTime() * 60);
                 break;
             case CONSULTATION:
-                totalTimeSeconds = session.getConsultationTime() * 60;
+                totalTimeSeconds = (int) (session.getConsultationTime() * 60);
                 break;
             default:
                 return 0; // No timer for other phases

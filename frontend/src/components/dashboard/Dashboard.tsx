@@ -225,7 +225,7 @@ const Dashboard: React.FC = () => {
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
-                onClick={() => navigate("/session/create")}
+                onClick={() => navigate("/session/configure")}
                 sx={{
                   borderRadius: 999,
                   textTransform: "none",

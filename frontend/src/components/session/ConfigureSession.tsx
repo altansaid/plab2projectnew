@@ -6,24 +6,19 @@ import {
   Button,
   Card,
   CardContent,
-  Container,
   Typography,
   FormControl,
-  FormControlLabel,
-  RadioGroup,
-  Radio,
   Select,
   MenuItem,
   InputLabel,
-  Chip,
   Grid,
   Divider,
   Alert,
   SelectChangeEvent,
   TextField,
+  Chip,
 } from "@mui/material";
 import {
-  Groups as GroupsIcon,
   Timer as TimerIcon,
   DateRange as DateRangeIcon,
 } from "@mui/icons-material";
@@ -33,10 +28,12 @@ import {
   getCategories,
   configureSession,
   getAllRecallDates,
+  createSession,
 } from "../../services/api";
 import { Helmet } from "react-helmet-async";
 
 interface SessionConfig {
+  sessionTitle: string;
   sessionType: "topic" | "recall";
   selectedTopics: string[];
   recallDate?: string; // Keep for backward compatibility
@@ -45,11 +42,6 @@ interface SessionConfig {
   readingTime: number;
   consultationTime: number;
   timingType: "countdown" | "stopwatch";
-}
-
-interface Participant {
-  username: string;
-  role: SessionRole;
 }
 
 const ConfigureSession: React.FC = () => {
@@ -62,10 +54,9 @@ const ConfigureSession: React.FC = () => {
 
   // Get role from location state (passed from role selection)
   const selectedRole = location.state?.role as SessionRole;
-  const sessionTitle =
-    location.state?.sessionTitle || "PLAB 2 Practice Session";
 
   const [config, setConfig] = useState<SessionConfig>({
+    sessionTitle: "",
     sessionType: "topic",
     selectedTopics: [],
     recallDate: "",
@@ -76,11 +67,8 @@ const ConfigureSession: React.FC = () => {
     timingType: "countdown",
   });
 
-  const [participants, setParticipants] = useState<Participant[]>([
-    { username: user?.name || "test1", role: selectedRole || "doctor" },
-  ]);
-
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const [availableTopics, setAvailableTopics] = useState<string[]>([]);
   const [availableRecallDates, setAvailableRecallDates] = useState<string[]>(
@@ -188,6 +176,11 @@ const ConfigureSession: React.FC = () => {
   };
 
   const isFormValid = () => {
+    // Check if session title is provided
+    if (!config.sessionTitle.trim()) {
+      return false;
+    }
+
     if (config.sessionType === "topic") {
       return config.selectedTopics.length > 0;
     } else if (config.sessionType === "recall") {
@@ -202,7 +195,9 @@ const ConfigureSession: React.FC = () => {
 
   const handleStartSession = async () => {
     if (!isFormValid()) {
-      if (config.sessionType === "topic") {
+      if (!config.sessionTitle.trim()) {
+        setError("Please enter a session title");
+      } else if (config.sessionType === "topic") {
         setError("Please select at least one topic for topic-based practice");
       } else {
         setError(
@@ -213,8 +208,28 @@ const ConfigureSession: React.FC = () => {
     }
 
     setError(null);
+    setCreating(true);
 
     try {
+      // First, create the session
+      const createResponse = await createSession({
+        title: config.sessionTitle,
+        sessionType: config.sessionType.toUpperCase(),
+        readingTime: config.readingTime,
+        consultationTime: config.consultationTime,
+        timingType: config.timingType.toUpperCase(),
+        selectedTopics: config.selectedTopics,
+      });
+
+      if (!createResponse.data.sessionCode) {
+        setError("Failed to create session");
+        setCreating(false);
+        return;
+      }
+
+      const newSessionCode = createResponse.data.sessionCode;
+
+      // Then configure the session with the detailed settings
       const configData = {
         sessionType: config.sessionType.toUpperCase(),
         selectedTopics: config.selectedTopics,
@@ -230,16 +245,15 @@ const ConfigureSession: React.FC = () => {
         timingType: config.timingType.toUpperCase(),
       };
 
-      // Configure session with backend
-      await configureSession(sessionCode!, configData);
+      await configureSession(newSessionCode, configData);
 
       // Navigate to session room
-      navigate(`/session/${sessionCode}/room`, {
+      navigate(`/session/${newSessionCode}/room`, {
         state: {
-          role: selectedRole,
+          role: selectedRole || "doctor",
           isHost: true,
           config,
-          sessionTitle,
+          sessionTitle: config.sessionTitle,
         },
       });
     } catch (error: any) {
@@ -248,19 +262,7 @@ const ConfigureSession: React.FC = () => {
         error.message ||
         "Failed to start session";
       setError(errorMessage);
-    }
-  };
-
-  const getRoleColor = (role: SessionRole) => {
-    switch (role) {
-      case "doctor":
-        return "#1976d2";
-      case "patient":
-        return "#2e7d32";
-      case "observer":
-        return "#7b1fa2";
-      default:
-        return "#666";
+      setCreating(false);
     }
   };
 
@@ -277,9 +279,11 @@ const ConfigureSession: React.FC = () => {
         <meta name="robots" content="noindex, nofollow" />
         <link
           rel="canonical"
-          href={`https://plab2practice.com/session/${
-            sessionCode || ""
-          }/configure`}
+          href={
+            sessionCode
+              ? `https://plab2practice.com/session/${sessionCode}/configure`
+              : "https://plab2practice.com/session/configure"
+          }
         />
       </Helmet>
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
@@ -287,11 +291,11 @@ const ConfigureSession: React.FC = () => {
           {/* Header */}
           <div className="text-center mb-8">
             <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">
-              Configure Session
+              Create & Configure Session
             </h1>
             <p className="text-gray-600">
-              Set up the consultation timing and select a topic for optimal
-              practice experience
+              Name your session and set up the consultation timing and topics
+              for optimal practice experience
             </p>
           </div>
 
@@ -301,7 +305,7 @@ const ConfigureSession: React.FC = () => {
             </Alert>
           )}
 
-          {/* Session Participants */}
+          {/* Session Title */}
           <Card
             sx={{
               mb: 4,
@@ -313,26 +317,44 @@ const ConfigureSession: React.FC = () => {
             }}
           >
             <CardContent>
-              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                <GroupsIcon sx={{ mr: 1 }} />
-                <Typography variant="h6">Session Participants</Typography>
-              </Box>
-              <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-                {participants.map((participant, index) => (
-                  <Chip
-                    key={index}
-                    label={`${participant.username} (${
-                      participant.role.charAt(0).toUpperCase() +
-                      participant.role.slice(1)
-                    })`}
-                    sx={{
-                      backgroundColor: `${getRoleColor(participant.role)}20`,
-                      color: getRoleColor(participant.role),
-                      fontWeight: "medium",
-                    }}
-                  />
-                ))}
-              </Box>
+              <Typography variant="h6" gutterBottom>
+                Session Title
+              </Typography>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                Give your practice session a descriptive name
+              </Typography>
+              <TextField
+                fullWidth
+                label="Session Title"
+                value={config.sessionTitle}
+                onChange={(e) =>
+                  setConfig((prev) => ({
+                    ...prev,
+                    sessionTitle: e.target.value,
+                  }))
+                }
+                placeholder="Enter a title for your session"
+                variant="outlined"
+                autoFocus
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: "12px",
+                    "& fieldset": {
+                      borderColor: "#93c5fd",
+                    },
+                    "&:hover fieldset": {
+                      borderColor: "#6366f1",
+                    },
+                    "&.Mui-focused fieldset": {
+                      borderColor: "#3b82f6",
+                      borderWidth: 2,
+                    },
+                  },
+                  "& .MuiInputLabel-root.Mui-focused": {
+                    color: "#3b82f6",
+                  },
+                }}
+              />
             </CardContent>
           </Card>
 
@@ -989,7 +1011,7 @@ const ConfigureSession: React.FC = () => {
                     fullWidth
                     size="large"
                     onClick={handleStartSession}
-                    disabled={!isFormValid()}
+                    disabled={!isFormValid() || creating}
                     startIcon={<TimerIcon />}
                     sx={{
                       py: 1.5,
@@ -1008,7 +1030,9 @@ const ConfigureSession: React.FC = () => {
                       },
                     }}
                   >
-                    Start Practice Session
+                    {creating
+                      ? "Creating Session..."
+                      : "Start Practice Session"}
                   </Button>
 
                   <Typography

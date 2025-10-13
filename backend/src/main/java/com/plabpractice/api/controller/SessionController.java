@@ -76,15 +76,21 @@ public class SessionController {
             // Extract session configuration
             String title = (String) sessionData.getOrDefault("title", "PLAB 2 Practice Session");
             String sessionType = (String) sessionData.getOrDefault("sessionType", "TOPIC");
-            Object readingTimeObj = sessionData.getOrDefault("readingTimeMinutes", 2);
-            Object consultationTimeObj = sessionData.getOrDefault("consultationTimeMinutes", 8);
 
-            int readingTime = (readingTimeObj instanceof Number)
-                    ? (int) Math.round(((Number) readingTimeObj).doubleValue())
-                    : 2;
-            int consultationTime = (consultationTimeObj instanceof Number)
-                    ? (int) Math.round(((Number) consultationTimeObj).doubleValue())
-                    : 8;
+            // Support both readingTime and readingTimeMinutes for backward compatibility
+            Object readingTimeObj = sessionData.containsKey("readingTimeMinutes")
+                    ? sessionData.get("readingTimeMinutes")
+                    : sessionData.getOrDefault("readingTime", 2);
+            Object consultationTimeObj = sessionData.containsKey("consultationTimeMinutes")
+                    ? sessionData.get("consultationTimeMinutes")
+                    : sessionData.getOrDefault("consultationTime", 8);
+
+            double readingTime = (readingTimeObj instanceof Number)
+                    ? ((Number) readingTimeObj).doubleValue()
+                    : 2.0;
+            double consultationTime = (consultationTimeObj instanceof Number)
+                    ? ((Number) consultationTimeObj).doubleValue()
+                    : 8.0;
             String timingType = (String) sessionData.getOrDefault("timingType", "COUNTDOWN");
             @SuppressWarnings("unchecked")
             List<String> selectedTopics = (List<String>) sessionData.getOrDefault("selectedTopics", List.of("Random"));
@@ -445,7 +451,7 @@ public class SessionController {
 
             // Start the timer and broadcast phase change
             webSocketService.broadcastPhaseChange(sessionCode, Session.Phase.READING.toString(),
-                    session.getReadingTime() * 60, System.currentTimeMillis());
+                    (int) (session.getReadingTime() * 60), System.currentTimeMillis());
             webSocketService.startTimer(sessionCode);
 
             return ResponseEntity.ok().build();
@@ -665,7 +671,7 @@ public class SessionController {
             // Notify all participants about the new case and phase change
             webSocketService.broadcastSessionUpdate(sessionCode);
             webSocketService.broadcastPhaseChange(sessionCode, Session.Phase.READING.toString(),
-                    session.getReadingTime() * 60, System.currentTimeMillis());
+                    (int) (session.getReadingTime() * 60), System.currentTimeMillis());
 
             // Start the timer for the new reading phase
             webSocketService.startTimer(sessionCode);
@@ -1211,7 +1217,7 @@ public class SessionController {
             // Notify all participants about the new topic and case
             webSocketService.broadcastSessionUpdate(sessionCode);
             webSocketService.broadcastPhaseChange(sessionCode, Session.Phase.READING.toString(),
-                    session.getReadingTime() * 60, System.currentTimeMillis());
+                    (int) (session.getReadingTime() * 60), System.currentTimeMillis());
             webSocketService.startTimer(sessionCode);
 
             Map<String, Object> response = new HashMap<>();

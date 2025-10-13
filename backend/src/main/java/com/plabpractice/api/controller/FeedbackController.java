@@ -282,7 +282,7 @@ public class FeedbackController {
             // Notify all participants about the new case and phase change
             webSocketService.broadcastSessionUpdate(session.getCode());
             webSocketService.broadcastPhaseChange(session.getCode(), Session.Phase.READING.toString(),
-                    session.getReadingTime() * 60, System.currentTimeMillis());
+                    (int) (session.getReadingTime() * 60), System.currentTimeMillis());
 
             // Start the timer for the new reading phase
             webSocketService.startTimer(session.getCode());
@@ -404,7 +404,7 @@ public class FeedbackController {
             // Notify all participants about the new case and phase change
             webSocketService.broadcastSessionUpdate(session.getCode());
             webSocketService.broadcastPhaseChange(session.getCode(), Session.Phase.READING.toString(),
-                    session.getReadingTime() * 60, System.currentTimeMillis());
+                    (int) (session.getReadingTime() * 60), System.currentTimeMillis());
 
             // Start the timer for the new reading phase
             webSocketService.startTimer(session.getCode());
