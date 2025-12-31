@@ -21,8 +21,8 @@ COPY src/ src/
 # Build the application
 RUN ./gradlew build --no-daemon -x test
 
-# Runtime stage
-FROM openjdk:21-jdk-slim
+# Runtime stage - Using Eclipse Temurin (official OpenJDK successor)
+FROM eclipse-temurin:21-jre-jammy
 
 # Install curl for health checks
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
