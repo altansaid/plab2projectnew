@@ -2,6 +2,7 @@ package com.plabpractice.api.config;
 
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
+import io.github.bucket4j.Refill;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -55,29 +56,33 @@ public class RateLimitConfig {
 
     private Bucket createLoginBucket(String key) {
         // 5 requests per minute for login
+        Bandwidth limit = Bandwidth.classic(5, Refill.greedy(5, Duration.ofMinutes(1)));
         return Bucket.builder()
-                .addLimit(Bandwidth.simple(5, Duration.ofMinutes(1)))
+                .addLimit(limit)
                 .build();
     }
 
     private Bucket createRegisterBucket(String key) {
         // 3 requests per minute for registration
+        Bandwidth limit = Bandwidth.classic(3, Refill.greedy(3, Duration.ofMinutes(1)));
         return Bucket.builder()
-                .addLimit(Bandwidth.simple(3, Duration.ofMinutes(1)))
+                .addLimit(limit)
                 .build();
     }
 
     private Bucket createPasswordResetBucket(String key) {
         // 3 requests per hour for password reset
+        Bandwidth limit = Bandwidth.classic(3, Refill.greedy(3, Duration.ofHours(1)));
         return Bucket.builder()
-                .addLimit(Bandwidth.simple(3, Duration.ofHours(1)))
+                .addLimit(limit)
                 .build();
     }
 
     private Bucket createGeneralApiBucket(String key) {
         // 100 requests per minute for general API
+        Bandwidth limit = Bandwidth.classic(100, Refill.greedy(100, Duration.ofMinutes(1)));
         return Bucket.builder()
-                .addLimit(Bandwidth.simple(100, Duration.ofMinutes(1)))
+                .addLimit(limit)
                 .build();
     }
 
