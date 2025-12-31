@@ -233,7 +233,7 @@ public class CaseController {
     }
 
     @PostMapping
-    // @PreAuthorize("hasRole('ADMIN')") // Temporarily disabled for testing
+    @PreAuthorize("hasRole('ADMIN')")
     @CacheEvict(value = { "recallDates" }, allEntries = true)
     public Case createCase(@RequestBody Case caseData) {
         Category category = categoryRepository.findById(caseData.getCategory().getId())
@@ -302,6 +302,7 @@ public class CaseController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     @CacheEvict(value = { "recallDates" }, allEntries = true)
     public ResponseEntity<?> deleteCase(@PathVariable Long id) {
         return caseRepository.findById(id)

@@ -1,5 +1,6 @@
 package com.plabpractice.api.config;
 
+import com.plabpractice.api.security.WebSocketAuthInterceptor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
@@ -13,6 +14,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Value("${cors.allowed-origins}")
     private String allowedOrigins;
+    
+    private final WebSocketAuthInterceptor webSocketAuthInterceptor;
+    
+    public WebSocketConfig(WebSocketAuthInterceptor webSocketAuthInterceptor) {
+        this.webSocketAuthInterceptor = webSocketAuthInterceptor;
+    }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
@@ -20,6 +27,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         String[] origins = allowedOrigins.split(",");
         registry.addEndpoint("/ws")
                 .setAllowedOrigins(origins)
+                .addInterceptors(webSocketAuthInterceptor)
                 .withSockJS();
     }
 

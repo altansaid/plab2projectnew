@@ -64,9 +64,11 @@ public class WebSecurityConfig {
                             // Admin endpoints
                             .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
+                            // File upload endpoints - upload requires authentication, downloads are public
+                            .requestMatchers("/api/upload/**").authenticated()
+                            .requestMatchers("/api/uploads/images/**").permitAll() // Public image access
+                            
                             // Other endpoints
-                            .requestMatchers("/api/upload/**").permitAll()
-                            .requestMatchers("/api/uploads/**").permitAll()
                             .requestMatchers("/ws/**").permitAll()
                             .requestMatchers("/ping").permitAll()
                             .requestMatchers("/actuator/health", "/actuator/info").permitAll()

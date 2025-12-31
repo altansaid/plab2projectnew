@@ -444,15 +444,17 @@ public class SessionController {
             session.setPhase(Session.Phase.READING);
             session.setStatus(Session.Status.IN_PROGRESS);
             session.setStartTime(LocalDateTime.now());
-            sessionRepository.save(session);
 
-            // Broadcast session update to all participants
-            webSocketService.broadcastSessionUpdate(sessionCode);
+            // Broadcast session update to all participants - OPTIMIZED
+            // Uses session object directly to avoid extra DB queries
+            webSocketService.broadcastSessionUpdate(session);
 
-            // Start the timer and broadcast phase change
-            webSocketService.broadcastPhaseChange(sessionCode, Session.Phase.READING.toString(),
-                    (int) (session.getReadingTime() * 60), System.currentTimeMillis());
-            webSocketService.startTimer(sessionCode);
+            // Broadcast phase change using session object (no DB lookup)
+            webSocketService.broadcastPhaseChange(session, Session.Phase.READING.toString(),
+                    System.currentTimeMillis());
+
+            // Start the timer - this will save the session internally
+            webSocketService.startTimer(session);
 
             return ResponseEntity.ok().build();
         } catch (Exception e) {
@@ -663,18 +665,17 @@ public class SessionController {
                 session.getUsedCaseIds().add(newCase.getId());
             }
 
-            sessionRepository.save(session);
-
             // Reset session participants' completion status
             sessionService.resetParticipantStatus(sessionCode);
 
-            // Notify all participants about the new case and phase change
-            webSocketService.broadcastSessionUpdate(sessionCode);
-            webSocketService.broadcastPhaseChange(sessionCode, Session.Phase.READING.toString(),
-                    (int) (session.getReadingTime() * 60), System.currentTimeMillis());
+            // Notify all participants about the new case and phase change - OPTIMIZED
+            // Uses session object directly to avoid extra DB queries
+            webSocketService.broadcastSessionUpdate(session);
+            webSocketService.broadcastPhaseChange(session, Session.Phase.READING.toString(),
+                    System.currentTimeMillis());
 
-            // Start the timer for the new reading phase
-            webSocketService.startTimer(sessionCode);
+            // Start the timer for the new reading phase - saves session internally
+            webSocketService.startTimer(session);
 
             return ResponseEntity.ok().build();
         } catch (Exception e) {
@@ -1209,16 +1210,17 @@ public class SessionController {
                 session.getUsedCaseIds().add(newCase.getId());
             }
 
-            sessionRepository.save(session);
-
             // Reset participant status
             sessionService.resetParticipantStatus(sessionCode);
 
-            // Notify all participants about the new topic and case
-            webSocketService.broadcastSessionUpdate(sessionCode);
-            webSocketService.broadcastPhaseChange(sessionCode, Session.Phase.READING.toString(),
-                    (int) (session.getReadingTime() * 60), System.currentTimeMillis());
-            webSocketService.startTimer(sessionCode);
+            // Notify all participants about the new topic and case - OPTIMIZED
+            // Uses session object directly to avoid extra DB queries
+            webSocketService.broadcastSessionUpdate(session);
+            webSocketService.broadcastPhaseChange(session, Session.Phase.READING.toString(),
+                    System.currentTimeMillis());
+
+            // Start timer - saves session internally
+            webSocketService.startTimer(session);
 
             Map<String, Object> response = new HashMap<>();
             response.put("message", "New topic selected successfully: " + newTopic);

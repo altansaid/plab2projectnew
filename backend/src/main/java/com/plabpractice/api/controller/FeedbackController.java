@@ -274,18 +274,17 @@ public class FeedbackController {
                 session.getUsedCaseIds().add(newCase.getId());
             }
 
-            sessionRepository.save(session);
-
             // Reset session participants' completion status
             sessionService.resetParticipantStatus(session.getCode());
 
-            // Notify all participants about the new case and phase change
-            webSocketService.broadcastSessionUpdate(session.getCode());
-            webSocketService.broadcastPhaseChange(session.getCode(), Session.Phase.READING.toString(),
-                    (int) (session.getReadingTime() * 60), System.currentTimeMillis());
+            // Notify all participants about the new case and phase change - OPTIMIZED
+            // Uses session object directly to avoid extra DB queries
+            webSocketService.broadcastSessionUpdate(session);
+            webSocketService.broadcastPhaseChange(session, Session.Phase.READING.toString(),
+                    System.currentTimeMillis());
 
-            // Start the timer for the new reading phase
-            webSocketService.startTimer(session.getCode());
+            // Start the timer for the new reading phase - saves session internally
+            webSocketService.startTimer(session);
 
             return true;
         } catch (Exception e) {
@@ -396,18 +395,17 @@ public class FeedbackController {
                 session.getUsedCaseIds().add(newCase.getId());
             }
 
-            sessionRepository.save(session);
-
             // Reset session participants' completion status
             sessionService.resetParticipantStatus(session.getCode());
 
-            // Notify all participants about the new case and phase change
-            webSocketService.broadcastSessionUpdate(session.getCode());
-            webSocketService.broadcastPhaseChange(session.getCode(), Session.Phase.READING.toString(),
-                    (int) (session.getReadingTime() * 60), System.currentTimeMillis());
+            // Notify all participants about the new case and phase change - OPTIMIZED
+            // Uses session object directly to avoid extra DB queries
+            webSocketService.broadcastSessionUpdate(session);
+            webSocketService.broadcastPhaseChange(session, Session.Phase.READING.toString(),
+                    System.currentTimeMillis());
 
-            // Start the timer for the new reading phase
-            webSocketService.startTimer(session.getCode());
+            // Start the timer for the new reading phase - saves session internally
+            webSocketService.startTimer(session);
 
             return true;
         } catch (Exception e) {

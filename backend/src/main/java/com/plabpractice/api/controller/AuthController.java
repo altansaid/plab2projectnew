@@ -1,10 +1,13 @@
 package com.plabpractice.api.controller;
 
+import com.plabpractice.api.config.RateLimitConfig;
+import com.plabpractice.api.exception.RateLimitExceededException;
 import com.plabpractice.api.model.User;
 import com.plabpractice.api.repository.UserRepository;
 import com.plabpractice.api.security.JwtTokenProvider;
 import com.plabpractice.api.service.EmailService;
 import com.plabpractice.api.service.GoogleTokenVerifier;
+import io.github.bucket4j.Bucket;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -15,6 +18,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -44,6 +48,24 @@ public class AuthController {
     @Autowired
     private GoogleTokenVerifier googleTokenVerifier;
 
+    @Autowired
+    private RateLimitConfig rateLimitConfig;
+
+    /**
+     * Extract client IP address from request, handling proxies.
+     */
+    private String getClientIp(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        String xRealIp = request.getHeader("X-Real-IP");
+        if (xRealIp != null && !xRealIp.isEmpty()) {
+            return xRealIp;
+        }
+        return request.getRemoteAddr();
+    }
+
     @GetMapping("/ping")
     public ResponseEntity<Map<String, Object>> ping() {
         Map<String, Object> response = new HashMap<>();
@@ -54,7 +76,17 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> authenticateUser(@jakarta.validation.Valid @RequestBody LoginRequest loginRequest) {
+    public ResponseEntity<?> authenticateUser(
+            @jakarta.validation.Valid @RequestBody LoginRequest loginRequest,
+            HttpServletRequest request) {
+        
+        // Rate limiting check
+        String clientIp = getClientIp(request);
+        Bucket bucket = rateLimitConfig.getLoginBucket(clientIp);
+        if (!rateLimitConfig.tryConsume(bucket)) {
+            throw new RateLimitExceededException("Too many login attempts. Please try again later.", 60);
+        }
+        
         try {
             // Authenticate user with Spring Security (single password verification)
             Authentication authentication = authenticationManager.authenticate(
@@ -82,7 +114,17 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> registerUser(@jakarta.validation.Valid @RequestBody RegisterRequest registerRequest) {
+    public ResponseEntity<?> registerUser(
+            @jakarta.validation.Valid @RequestBody RegisterRequest registerRequest,
+            HttpServletRequest request) {
+        
+        // Rate limiting check
+        String clientIp = getClientIp(request);
+        Bucket bucket = rateLimitConfig.getRegisterBucket(clientIp);
+        if (!rateLimitConfig.tryConsume(bucket)) {
+            throw new RateLimitExceededException("Too many registration attempts. Please try again later.", 60);
+        }
+        
         try {
             if (userRepository.existsByEmail(registerRequest.getEmail())) {
                 Map<String, Object> errorResponse = new HashMap<>();
@@ -110,9 +152,19 @@ public class AuthController {
     }
 
     @PostMapping("/google")
-    public ResponseEntity<?> authenticateWithGoogle(@Valid @RequestBody GoogleAuthRequest request) {
+    public ResponseEntity<?> authenticateWithGoogle(
+            @Valid @RequestBody GoogleAuthRequest googleRequest,
+            HttpServletRequest request) {
+        
+        // Rate limiting check - same as login
+        String clientIp = getClientIp(request);
+        Bucket bucket = rateLimitConfig.getLoginBucket(clientIp);
+        if (!rateLimitConfig.tryConsume(bucket)) {
+            throw new RateLimitExceededException("Too many login attempts. Please try again later.", 60);
+        }
+        
         try {
-            Map<String, Object> payload = googleTokenVerifier.verify(request.getIdToken());
+            Map<String, Object> payload = googleTokenVerifier.verify(googleRequest.getIdToken());
 
             String email = (String) payload.get("email");
             String name = (String) payload.get("name");
@@ -181,9 +233,19 @@ public class AuthController {
     private int resetTokenMinutes;
 
     @PostMapping("/forgot-password")
-    public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+    public ResponseEntity<?> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest forgotRequest,
+            HttpServletRequest request) {
+        
+        // Rate limiting check - stricter for password reset
+        String clientIp = getClientIp(request);
+        Bucket bucket = rateLimitConfig.getPasswordResetBucket(clientIp);
+        if (!rateLimitConfig.tryConsume(bucket)) {
+            throw new RateLimitExceededException("Too many password reset requests. Please try again later.", 3600);
+        }
+        
         try {
-            User user = userRepository.findByEmail(request.getEmail()).orElse(null);
+            User user = userRepository.findByEmail(forgotRequest.getEmail()).orElse(null);
 
             if (user != null) {
                 // Generate reset token

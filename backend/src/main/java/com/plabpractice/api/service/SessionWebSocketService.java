@@ -53,12 +53,24 @@ public class SessionWebSocketService {
 
     private static final int DISCONNECT_TIMEOUT_MINUTES = 5;
 
+    /**
+     * Broadcast session update - optimized version that accepts Session object
+     * directly.
+     * Use this when you already have the session in memory to avoid extra DB query.
+     */
+    public void broadcastSessionUpdate(Session session) {
+        Map<String, Object> sessionData = createSessionUpdateMessage(session);
+        messagingTemplate.convertAndSend("/topic/session/" + session.getCode(), sessionData);
+    }
+
+    /**
+     * Broadcast session update by session code - requires DB lookup.
+     * Prefer broadcastSessionUpdate(Session) when session is already available.
+     */
     public void broadcastSessionUpdate(String sessionCode) {
         Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
         if (sessionOpt.isPresent()) {
-            Session session = sessionOpt.get();
-            Map<String, Object> sessionData = createSessionUpdateMessage(session);
-            messagingTemplate.convertAndSend("/topic/session/" + sessionCode, sessionData);
+            broadcastSessionUpdate(sessionOpt.get());
         }
     }
 
@@ -127,36 +139,59 @@ public class SessionWebSocketService {
         }
     }
 
-    public void broadcastPhaseChange(String sessionCode, String phase, int durationSeconds, long startTimestamp) {
+    /**
+     * Broadcast phase change - optimized version that accepts Session object
+     * directly.
+     * Use this when you already have the session in memory to avoid extra DB query.
+     */
+    public void broadcastPhaseChange(Session session, String phase, long startTimestamp) {
         Map<String, Object> message = new HashMap<>();
         message.put("type", "PHASE_CHANGE");
         message.put("phase", phase);
-        message.put("durationSeconds", durationSeconds);
         message.put("startTimestamp", startTimestamp);
 
-        // Get the session to include the configured times
-        Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
-        if (sessionOpt.isPresent()) {
-            Session session = sessionOpt.get();
-            if (phase.equalsIgnoreCase("CONSULTATION")) {
-                message.put("durationSeconds", (int) (session.getConsultationTime() * 60));
-            } else if (phase.equalsIgnoreCase("READING")) {
-                message.put("durationSeconds", (int) (session.getReadingTime() * 60));
-            }
+        // Calculate duration from session config - no DB query needed
+        if (phase.equalsIgnoreCase("CONSULTATION")) {
+            message.put("durationSeconds", (int) (session.getConsultationTime() * 60));
+        } else if (phase.equalsIgnoreCase("READING")) {
+            message.put("durationSeconds", (int) (session.getReadingTime() * 60));
+        } else {
+            message.put("durationSeconds", 0);
         }
 
-        messagingTemplate.convertAndSend("/topic/session/" + sessionCode, message);
+        messagingTemplate.convertAndSend("/topic/session/" + session.getCode(), message);
     }
 
-    public void startTimer(String sessionCode) {
-        // Stop any existing timer first to prevent conflicts
-        stopTimer(sessionCode);
-
+    /**
+     * Broadcast phase change by session code - requires DB lookup.
+     * Prefer broadcastPhaseChange(Session, phase, startTimestamp) when session is
+     * already available.
+     */
+    public void broadcastPhaseChange(String sessionCode, String phase, int durationSeconds, long startTimestamp) {
         Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
-        if (!sessionOpt.isPresent()) {
-            return;
+        if (sessionOpt.isPresent()) {
+            broadcastPhaseChange(sessionOpt.get(), phase, startTimestamp);
+        } else {
+            // Fallback: send with provided duration if session not found
+            Map<String, Object> message = new HashMap<>();
+            message.put("type", "PHASE_CHANGE");
+            message.put("phase", phase);
+            message.put("durationSeconds", durationSeconds);
+            message.put("startTimestamp", startTimestamp);
+            messagingTemplate.convertAndSend("/topic/session/" + sessionCode, message);
         }
-        Session session = sessionOpt.get();
+    }
+
+    /**
+     * Start timer - optimized version that accepts Session object directly.
+     * Use this when you already have the session in memory to avoid extra DB query.
+     * Returns the updated session after saving timer metadata.
+     */
+    public Session startTimer(Session session) {
+        String sessionCode = session.getCode();
+
+        // Stop any existing timer first to prevent conflicts (lightweight operation)
+        stopTimerWithoutDbUpdate(sessionCode);
 
         activeTimers.put(sessionCode, true);
 
@@ -168,28 +203,31 @@ public class SessionWebSocketService {
         session.setTimeRemaining(phaseDurationSeconds);
         session.setPhaseStartTime(LocalDateTime.now());
         session.setTimerStartTimestamp(startTimestamp); // Store the shared timestamp
-        sessionRepository.save(session);
+        Session savedSession = sessionRepository.save(session);
 
         // Send TIMER_START event ONCE with all necessary data for client-side countdown
         Map<String, Object> timerStartData = Map.of(
                 "type", "TIMER_START",
-                "phase", session.getPhase(),
+                "phase", savedSession.getPhase(),
                 "durationSeconds", phaseDurationSeconds,
                 "startTimestamp", startTimestamp,
                 "sessionCode", sessionCode,
                 "message", "Timer started - clients will handle countdown locally");
         messagingTemplate.convertAndSend("/topic/session/" + sessionCode, timerStartData);
 
+        // Store the current phase for comparison in the scheduled task
+        final Session.Phase currentPhase = savedSession.getPhase();
+
         // Schedule SINGLE task to handle phase transition when timer expires
         ScheduledFuture<?> expiryTask = scheduler.schedule(() -> {
             if (activeTimers.getOrDefault(sessionCode, false)) {
-                // Reload session to get current state
+                // Reload session to get current state (necessary for scheduled task)
                 Optional<Session> currentSessionOpt = sessionRepository.findByCode(sessionCode);
                 if (currentSessionOpt.isPresent()) {
                     Session currentSession = currentSessionOpt.get();
 
                     // Only proceed if the session is still in the same phase
-                    if (currentSession.getPhase() == session.getPhase()) {
+                    if (currentSession.getPhase() == currentPhase) {
                         handlePhaseTransition(currentSession);
                     }
                 }
@@ -198,18 +236,27 @@ public class SessionWebSocketService {
 
         // Store the expiry task (not a repeating timer)
         timerTasks.put(sessionCode, expiryTask);
+
+        return savedSession;
     }
 
-    public void stopTimer(String sessionCode) {
-        activeTimers.put(sessionCode, false);
-
-        // Clear the stored timer start timestamp to prevent stale data
+    /**
+     * Start timer by session code - requires DB lookup.
+     * Prefer startTimer(Session) when session is already available.
+     */
+    public void startTimer(String sessionCode) {
         Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
         if (sessionOpt.isPresent()) {
-            Session session = sessionOpt.get();
-            session.setTimerStartTimestamp(null);
-            sessionRepository.save(session);
+            startTimer(sessionOpt.get());
         }
+    }
+
+    /**
+     * Stop timer - lightweight version that doesn't update DB.
+     * Use this when you're about to start a new timer immediately after.
+     */
+    private void stopTimerWithoutDbUpdate(String sessionCode) {
+        activeTimers.put(sessionCode, false);
 
         // Cancel the scheduled timer task to prevent overlapping timers
         ScheduledFuture<?> timerTask = timerTasks.remove(sessionCode);
@@ -218,6 +265,40 @@ public class SessionWebSocketService {
         }
     }
 
+    /**
+     * Stop timer - optimized version that accepts Session object directly.
+     * Clears timer timestamp and saves session.
+     */
+    public void stopTimer(Session session) {
+        String sessionCode = session.getCode();
+        stopTimerWithoutDbUpdate(sessionCode);
+
+        // Clear the stored timer start timestamp to prevent stale data
+        session.setTimerStartTimestamp(null);
+        sessionRepository.save(session);
+    }
+
+    /**
+     * Stop timer by session code - requires DB lookup.
+     * Prefer stopTimer(Session) when session is already available.
+     */
+    public void stopTimer(String sessionCode) {
+        stopTimerWithoutDbUpdate(sessionCode);
+
+        // Clear the stored timer start timestamp to prevent stale data
+        Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
+        if (sessionOpt.isPresent()) {
+            Session session = sessionOpt.get();
+            session.setTimerStartTimestamp(null);
+            sessionRepository.save(session);
+        }
+    }
+
+    /**
+     * Handle phase transition - OPTIMIZED version.
+     * Uses in-memory session object to avoid redundant DB queries.
+     * DB round-trips reduced from 4-6 to just 1.
+     */
     @Transactional
     public void handlePhaseTransition(Session session) {
         Session.Phase currentPhase = session.getPhase();
@@ -229,27 +310,27 @@ public class SessionWebSocketService {
             nextPhase = Session.Phase.FEEDBACK;
         } else if (currentPhase == Session.Phase.FEEDBACK) {
             // Feedback phase completed - end the session
-            endSession(session.getCode(), "Session completed successfully");
+            endSession(session, "Session completed successfully");
             return;
         }
 
         if (nextPhase != null) {
-            // Update session phase
+            // Update session phase in memory
             session.setPhase(nextPhase);
-            session = sessionRepository.save(session);
-
-            // Broadcast phase change with appropriate duration
-            int phaseDuration = getCurrentPhaseTime(session);
             long startTimestamp = System.currentTimeMillis();
 
-            broadcastPhaseChange(session.getCode(), nextPhase.toString(), phaseDuration, startTimestamp);
+            // Broadcast phase change IMMEDIATELY using in-memory session (no DB query)
+            broadcastPhaseChange(session, nextPhase.toString(), startTimestamp);
 
             // Start timer for the new phase (unless transitioning to feedback)
             if (nextPhase != Session.Phase.FEEDBACK) {
-                startTimer(session.getCode());
+                // startTimer will save the session - only 1 DB write total
+                startTimer(session);
             } else {
-                // Start a timer for feedback phase (e.g., 10 minutes max for feedback)
-                scheduleFeedbackTimeout(session.getCode(), 20 * 60); // 10 minutes
+                // Save session once for feedback phase
+                sessionRepository.save(session);
+                // Start a timer for feedback phase (e.g., 20 minutes max for feedback)
+                scheduleFeedbackTimeout(session.getCode(), 20 * 60);
             }
         }
     }
@@ -271,6 +352,10 @@ public class SessionWebSocketService {
         timerTasks.put(sessionCode + "_feedback", feedbackTask);
     }
 
+    /**
+     * Skip phase - OPTIMIZED version.
+     * Uses in-memory session object to minimize DB queries.
+     */
     public void skipPhase(String sessionCode, User user) {
         Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
         if (!sessionOpt.isPresent())
@@ -299,20 +384,23 @@ public class SessionWebSocketService {
         }
 
         if (nextPhase != null) {
-            stopTimer(sessionCode);
-            // Update the session phase before broadcasting
-            session.setPhase(nextPhase);
-            session = sessionRepository.save(session);
+            // Stop timer without DB update (lightweight)
+            stopTimerWithoutDbUpdate(sessionCode);
 
-            // Get the correct duration for the next phase
-            int phaseDuration = getCurrentPhaseTime(session);
+            // Update the session phase in memory
+            session.setPhase(nextPhase);
             long startTimestamp = System.currentTimeMillis();
 
-            broadcastPhaseChange(sessionCode, nextPhase.toString(), phaseDuration, startTimestamp);
+            // Broadcast phase change IMMEDIATELY using in-memory session (no DB query)
+            broadcastPhaseChange(session, nextPhase.toString(), startTimestamp);
 
             // Start timer for the new phase (unless transitioning to feedback)
             if (nextPhase != Session.Phase.FEEDBACK) {
-                startTimer(sessionCode);
+                // startTimer will save the session - only 1 DB write total
+                startTimer(session);
+            } else {
+                // Save session once for feedback phase
+                sessionRepository.save(session);
             }
         }
     }
@@ -371,22 +459,22 @@ public class SessionWebSocketService {
         broadcastParticipantUpdate(sessionCode);
     }
 
+    /**
+     * End session - optimized version that accepts Session object directly.
+     * Avoids extra DB lookup when session is already in memory.
+     */
     @Transactional
-    public void endSession(String sessionCode, String reason) {
-        Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
-        if (!sessionOpt.isPresent()) {
-            return;
-        }
+    public void endSession(Session session, String reason) {
+        String sessionCode = session.getCode();
 
-        Session session = sessionOpt.get();
-
-        // Stop any active timers
-        stopTimer(sessionCode);
+        // Stop any active timers (lightweight - no DB)
+        stopTimerWithoutDbUpdate(sessionCode);
 
         // Update session status
         session.setPhase(Session.Phase.COMPLETED);
         session.setStatus(Session.Status.COMPLETED);
         session.setEndTime(LocalDateTime.now());
+        session.setTimerStartTimestamp(null);
         sessionRepository.save(session);
 
         // Broadcast session ended message to all participants
@@ -398,12 +486,22 @@ public class SessionWebSocketService {
         messagingTemplate.convertAndSend("/topic/session/" + sessionCode, sessionEndedData);
     }
 
-    public boolean canStartSession(String sessionCode) {
+    /**
+     * End session by session code - requires DB lookup.
+     * Prefer endSession(Session, reason) when session is already available.
+     */
+    @Transactional
+    public void endSession(String sessionCode, String reason) {
         Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
-        if (!sessionOpt.isPresent())
-            return false;
+        if (sessionOpt.isPresent()) {
+            endSession(sessionOpt.get(), reason);
+        }
+    }
 
-        Session session = sessionOpt.get();
+    /**
+     * Check if session can start - optimized version that accepts Session object.
+     */
+    public boolean canStartSession(Session session) {
         List<SessionParticipant> participants = participantRepository.findBySessionId(session.getId());
 
         // Need at least 1 participant (host is always DOCTOR)
@@ -419,16 +517,28 @@ public class SessionWebSocketService {
         return hasValidSessionRole;
     }
 
+    /**
+     * Check if session can start by session code - requires DB lookup.
+     */
+    public boolean canStartSession(String sessionCode) {
+        Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
+        if (!sessionOpt.isPresent())
+            return false;
+        return canStartSession(sessionOpt.get());
+    }
+
+    /**
+     * Check session start condition - reuses session from canStartSession check.
+     */
     public void checkSessionStartCondition(String sessionCode) {
-        if (canStartSession(sessionCode)) {
-            Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
-            if (sessionOpt.isPresent()) {
-                Session session = sessionOpt.get();
-                if (session.getPhase() == Session.Phase.WAITING) {
-                    broadcastPhaseChange(sessionCode, session.getPhase().toString(), getCurrentPhaseTime(session),
-                            System.currentTimeMillis());
-                }
-            }
+        Optional<Session> sessionOpt = sessionRepository.findByCode(sessionCode);
+        if (!sessionOpt.isPresent()) {
+            return;
+        }
+        Session session = sessionOpt.get();
+
+        if (canStartSession(session) && session.getPhase() == Session.Phase.WAITING) {
+            broadcastPhaseChange(session, session.getPhase().toString(), System.currentTimeMillis());
         }
     }
 
