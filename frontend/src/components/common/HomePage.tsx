@@ -60,19 +60,32 @@ const HomePage: React.FC = () => {
           content="Prepare for PLAB 2 with interactive practice sessions, real clinical cases, role-based scenarios, and detailed feedback. Build confidence and track progress."
         />
         <link rel="canonical" href="https://plab2practice.com/" />
+
+        {/* Open Graph */}
+        <meta property="og:type" content="website" />
         <meta
           property="og:title"
           content="PLAB 2 Practice – Interactive Exam Preparation"
         />
         <meta
           property="og:description"
-          content="Practice PLAB 2 cases with peers, role-play sessions, and get structured feedback."
+          content="Practice PLAB 2 cases with peers, role-play sessions, and get structured feedback. 100% Free."
         />
         <meta property="og:url" content="https://plab2practice.com/" />
         <meta
           property="og:image"
-          content="https://plab2practice.com/og-image.jpg"
+          content="https://plab2practice.com/og-image.png"
         />
+        <meta property="og:site_name" content="PLAB 2 Practice" />
+        <meta property="og:locale" content="en_GB" />
+
+        {/* Twitter */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="PLAB 2 Practice – Interactive Exam Preparation" />
+        <meta name="twitter:description" content="Practice PLAB 2 cases with peers, role-play sessions, and get structured feedback. 100% Free." />
+        <meta name="twitter:image" content="https://plab2practice.com/og-image.png" />
+
+        {/* WebSite Schema */}
         <script type="application/ld+json">
           {JSON.stringify({
             "@context": "https://schema.org",
@@ -84,6 +97,68 @@ const HomePage: React.FC = () => {
               target: "https://plab2practice.com/?q={search_term_string}",
               "query-input": "required name=search_term_string",
             },
+          })}
+        </script>
+
+        {/* Organization Schema */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "EducationalOrganization",
+            name: "PLAB 2 Practice",
+            url: "https://plab2practice.com/",
+            logo: "https://plab2practice.com/logo.png",
+            description: "Free online platform for PLAB 2 exam preparation with interactive practice sessions, clinical cases, and peer feedback.",
+            sameAs: [
+              "https://discord.gg/Ymv4KEWZEp"
+            ],
+            contactPoint: {
+              "@type": "ContactPoint",
+              contactType: "customer support",
+              url: "https://forms.gle/ZFQhWvfxgjYViHDHA"
+            }
+          })}
+        </script>
+
+        {/* FAQ Schema */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: [
+              {
+                "@type": "Question",
+                name: "What is PLAB 2 Practice?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "PLAB 2 Practice is a free online platform that helps medical professionals prepare for the PLAB 2 exam through interactive practice sessions, real clinical cases, and structured peer feedback."
+                }
+              },
+              {
+                "@type": "Question",
+                name: "Is PLAB 2 Practice free?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "Yes, PLAB 2 Practice is 100% free. You can access all features including practice sessions, clinical cases, and feedback without any cost."
+                }
+              },
+              {
+                "@type": "Question",
+                name: "How do practice sessions work?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "You can create or join practice sessions with peers. Sessions include timed stations with real clinical scenarios, role-play opportunities, and structured feedback after each case."
+                }
+              },
+              {
+                "@type": "Question",
+                name: "Can I practice with other candidates?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "Yes! You can practice with peers through our real-time session feature. Join our Discord community to find study partners preparing for PLAB 2."
+                }
+              }
+            ]
           })}
         </script>
       </Helmet>

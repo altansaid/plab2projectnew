@@ -19,6 +19,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { RootState } from "../../store";
 import { updateUser } from "../../features/auth/authSlice";
 import { api } from "../../services/api";
+import { Helmet } from "react-helmet-async";
 
 const inputOutlineSx = {
   "& .MuiOutlinedInput-root": {
@@ -134,15 +135,20 @@ const Profile: React.FC = () => {
   }, [passwordMessage, passwordError]);
 
   return (
-    <Box
-      sx={{
-        minHeight: "calc(100vh - 64px)",
-        background:
-          "linear-gradient(135deg, #eff6ff 0%, #faf5ff 50%, #fff1f2 100%)",
-        py: 6,
-      }}
-    >
-      <Container maxWidth="md">
+    <>
+      <Helmet>
+        <title>My Profile - PLAB 2 Practice</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
+      <Box
+        sx={{
+          minHeight: "calc(100vh - 64px)",
+          background:
+            "linear-gradient(135deg, #eff6ff 0%, #faf5ff 50%, #fff1f2 100%)",
+          py: 6,
+        }}
+      >
+        <Container maxWidth="md">
         <Box sx={{ mt: 2, mb: 2 }}>
           <Typography variant="h4" component="h1" gutterBottom>
             My Profile
@@ -377,6 +383,7 @@ const Profile: React.FC = () => {
         </Box>
       </Container>
     </Box>
+    </>
   );
 };
 

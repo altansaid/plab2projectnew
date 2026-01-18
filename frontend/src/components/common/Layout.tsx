@@ -60,9 +60,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           name="description"
           content="Practice PLAB 2 exam scenarios with real-time sessions, feedback, and analytics. Prepare effectively for PLAB 2 with our interactive platform."
         />
+        {/* Open Graph defaults */}
         <meta property="og:site_name" content="PLAB 2 Practice" />
         <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://plab2practice.com/og-image.png" />
+        <meta property="og:locale" content="en_GB" />
+
+        {/* Twitter defaults */}
         <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:site" content="@plab2practice" />
+        <meta name="twitter:image" content="https://plab2practice.com/og-image.png" />
+
         <meta name="robots" content="index, follow" />
       </Helmet>
       {/* Top notification strip */}

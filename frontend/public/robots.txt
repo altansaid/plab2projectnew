@@ -1,14 +1,19 @@
 User-agent: *
 Allow: /
 
-# Disallow sensitive/non-SEO routes
-Disallow: /login
-Disallow: /register
+# Disallow private/authenticated routes
 Disallow: /dashboard
 Disallow: /profile
 Disallow: /forgot-password
 Disallow: /reset-password
 Disallow: /session/
+Disallow: /admin
+
+# Allow crawlers to see login/register for indexing purposes
+# (pages have noindex meta tags for fine-grained control)
+
+# Crawl-delay for polite crawling
+Crawl-delay: 1
 
 Sitemap: https://plab2practice.com/sitemap.xml
 
