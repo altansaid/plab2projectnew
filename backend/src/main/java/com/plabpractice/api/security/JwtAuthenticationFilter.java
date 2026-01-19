@@ -10,15 +10,19 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.security.Key;
+import java.util.Collections;
 import java.util.Optional;
+import java.util.UUID;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -26,6 +30,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider jwtTokenProvider;
     private final CustomUserDetailsService customUserDetailsService;
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Value("${supabase.jwt.secret:}")
     private String supabaseJwtSecret;
@@ -33,10 +38,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     // Constructor injection
     public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
             CustomUserDetailsService customUserDetailsService,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.customUserDetailsService = customUserDetailsService;
         this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Override
@@ -47,11 +54,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             if (jwt != null) {
                 // First try Supabase JWT validation
-                String email = validateSupabaseToken(jwt);
+                SupabaseUserInfo supabaseUser = validateSupabaseTokenAndGetInfo(jwt);
 
-                if (email != null) {
-                    // Supabase token is valid
-                    UserDetails userDetails = customUserDetailsService.loadUserByUsername(email);
+                if (supabaseUser != null && supabaseUser.email != null) {
+                    // Supabase token is valid - get or create user
+                    UserDetails userDetails = getOrCreateSupabaseUser(supabaseUser);
                     UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                             userDetails, null, userDetails.getAuthorities());
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
@@ -74,12 +81,63 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         filterChain.doFilter(request, response);
     }
+    
+    /**
+     * Get existing user or auto-create for Supabase authenticated users.
+     */
+    private UserDetails getOrCreateSupabaseUser(SupabaseUserInfo supabaseUser) {
+        // Try to find existing user
+        Optional<User> existingUser = userRepository.findByEmail(supabaseUser.email);
+        
+        if (existingUser.isEmpty() && supabaseUser.supabaseId != null) {
+            existingUser = userRepository.findBySupabaseId(supabaseUser.supabaseId);
+        }
+        
+        User user;
+        if (existingUser.isPresent()) {
+            user = existingUser.get();
+            // Update supabaseId if not set
+            if (user.getSupabaseId() == null && supabaseUser.supabaseId != null) {
+                user.setSupabaseId(supabaseUser.supabaseId);
+                user.setMigratedToSupabase(true);
+                userRepository.save(user);
+            }
+        } else {
+            // Auto-create new user from Supabase data
+            user = new User();
+            user.setEmail(supabaseUser.email);
+            user.setName(supabaseUser.name != null ? supabaseUser.name : supabaseUser.email.split("@")[0]);
+            user.setPassword(passwordEncoder.encode(UUID.randomUUID().toString())); // Random password
+            user.setRole(User.Role.USER);
+            user.setSupabaseId(supabaseUser.supabaseId);
+            user.setMigratedToSupabase(true);
+            user.setProvider(supabaseUser.isGoogle ? User.AuthProvider.GOOGLE : User.AuthProvider.LOCAL);
+            user = userRepository.save(user);
+            logger.info("Auto-created user from Supabase: " + supabaseUser.email);
+        }
+        
+        return org.springframework.security.core.userdetails.User.builder()
+                .username(user.getEmail())
+                .password(user.getPassword())
+                .authorities(Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())))
+                .build();
+    }
 
     /**
-     * Validate Supabase JWT token and return the user's email if valid.
+     * Helper class to hold Supabase user info extracted from JWT.
+     */
+    private static class SupabaseUserInfo {
+        String email;
+        String name;
+        String supabaseId;
+        boolean isGoogle;
+    }
+    
+    /**
+     * Validate Supabase JWT token and return user info if valid.
      * Returns null if the token is not a valid Supabase token.
      */
-    private String validateSupabaseToken(String token) {
+    private SupabaseUserInfo validateSupabaseTokenAndGetInfo(String token) {
         if (supabaseJwtSecret == null || supabaseJwtSecret.isEmpty()) {
             return null;
         }
@@ -93,37 +151,37 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     .parseClaimsJws(token)
                     .getBody();
 
-            // Supabase tokens have 'email' in the claims
-            String email = claims.get("email", String.class);
-
-            // Also check for 'sub' which is the Supabase user ID
-            String supabaseId = claims.getSubject();
-
-            if (email != null && !email.isEmpty()) {
-                // Try to find user by email first
-                Optional<User> userOpt = userRepository.findByEmail(email);
-
-                if (userOpt.isPresent()) {
-                    User user = userOpt.get();
-                    // Update supabaseId if not set
-                    if (user.getSupabaseId() == null && supabaseId != null) {
-                        user.setSupabaseId(supabaseId);
-                        user.setMigratedToSupabase(true);
-                        userRepository.save(user);
-                    }
-                    return email;
-                }
-
-                // If user not found by email, try by supabaseId
-                if (supabaseId != null) {
-                    Optional<User> userBySupabase = userRepository.findBySupabaseId(supabaseId);
-                    if (userBySupabase.isPresent()) {
-                        return userBySupabase.get().getEmail();
-                    }
+            SupabaseUserInfo info = new SupabaseUserInfo();
+            
+            // Extract email
+            info.email = claims.get("email", String.class);
+            
+            // Extract supabase user ID (sub claim)
+            info.supabaseId = claims.getSubject();
+            
+            // Try to extract name from user_metadata
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> userMetadata = claims.get("user_metadata", java.util.Map.class);
+            if (userMetadata != null) {
+                if (userMetadata.containsKey("name")) {
+                    info.name = (String) userMetadata.get("name");
+                } else if (userMetadata.containsKey("full_name")) {
+                    info.name = (String) userMetadata.get("full_name");
                 }
             }
+            
+            // Check if Google provider from app_metadata
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> appMetadata = claims.get("app_metadata", java.util.Map.class);
+            if (appMetadata != null && "google".equals(appMetadata.get("provider"))) {
+                info.isGoogle = true;
+            }
 
-            return email;
+            if (info.email == null || info.email.isEmpty()) {
+                return null;
+            }
+
+            return info;
         } catch (JwtException | IllegalArgumentException e) {
             // Token is not a valid Supabase JWT, will try legacy validation
             logger.debug("Token is not a valid Supabase JWT: " + e.getMessage());

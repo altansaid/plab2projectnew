@@ -39,7 +39,8 @@ import {
   Person as UserIcon,
   ArrowUpward as AscIcon,
   ArrowDownward as DescIcon,
-  NewReleases as NewIcon,
+  CheckCircle as CheckIcon,
+  Cancel as CancelIcon,
 } from "@mui/icons-material";
 import { useFormik } from "formik";
 import * as Yup from "yup";
@@ -50,6 +51,8 @@ interface UserStats {
   totalUsers: number;
   adminCount: number;
   userCount: number;
+  supabaseUsers?: number;
+  syncedUsers?: number;
 }
 
 interface UsersResponse {
@@ -268,6 +271,44 @@ const UserManagement: React.FC = () => {
         </Grid>
       </Grid>
 
+      {/* Migration Status */}
+      {stats.supabaseUsers !== undefined && (
+        <Paper sx={{ p: 2, mb: 2, background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)' }}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center" justifyContent="space-between">
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Supabase Migration Status
+              </Typography>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                {stats.syncedUsers || 0} / {stats.supabaseUsers || 0} kullanıcı migrate edildi
+              </Typography>
+            </Box>
+            <Box sx={{ minWidth: 200 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">Migration</Typography>
+                <Typography variant="caption" fontWeight={600} color="primary.main">
+                  {stats.supabaseUsers ? Math.round(((stats.syncedUsers || 0) / stats.supabaseUsers) * 100) : 0}% tamamlandı
+                </Typography>
+              </Box>
+              <Box sx={{ 
+                height: 8, 
+                borderRadius: 4, 
+                backgroundColor: '#e2e8f0',
+                overflow: 'hidden'
+              }}>
+                <Box sx={{ 
+                  height: '100%', 
+                  width: `${stats.supabaseUsers ? Math.round(((stats.syncedUsers || 0) / stats.supabaseUsers) * 100) : 0}%`,
+                  background: 'linear-gradient(90deg, #3b82f6 0%, #10b981 100%)',
+                  borderRadius: 4,
+                  transition: 'width 0.5s ease'
+                }} />
+              </Box>
+            </Box>
+          </Stack>
+        </Paper>
+      )}
+
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 2 }}>
         <form onSubmit={handleSearch}>
@@ -374,7 +415,10 @@ const UserManagement: React.FC = () => {
                   {sortBy === "role" && (sortDir === "asc" ? <AscIcon fontSize="small" /> : <DescIcon fontSize="small" />)}
                 </Box>
               </TableCell>
-              <TableCell>Account Type</TableCell>
+              <TableCell>Provider</TableCell>
+              <TableCell align="center">Supabase</TableCell>
+              <TableCell align="center">PostgreSQL</TableCell>
+              <TableCell align="center">Synced</TableCell>
               <TableCell
                 onClick={() => handleSort("createdAt")}
                 sx={{ cursor: "pointer", "&:hover": { bgcolor: "action.hover" } }}
@@ -396,6 +440,9 @@ const UserManagement: React.FC = () => {
                   <TableCell><Skeleton variant="text" width={180} /></TableCell>
                   <TableCell><Skeleton variant="rounded" width={70} height={24} /></TableCell>
                   <TableCell><Skeleton variant="rounded" width={60} height={24} /></TableCell>
+                  <TableCell align="center"><Skeleton variant="circular" width={20} height={20} /></TableCell>
+                  <TableCell align="center"><Skeleton variant="circular" width={20} height={20} /></TableCell>
+                  <TableCell align="center"><Skeleton variant="circular" width={20} height={20} /></TableCell>
                   <TableCell><Skeleton variant="text" width={90} /></TableCell>
                   <TableCell align="right">
                     <Skeleton variant="circular" width={32} height={32} sx={{ display: 'inline-block', mr: 1 }} />
@@ -405,7 +452,7 @@ const UserManagement: React.FC = () => {
               ))
             ) : users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
                   <Typography color="text.secondary">
                     No users found
                   </Typography>
@@ -413,31 +460,32 @@ const UserManagement: React.FC = () => {
               </TableRow>
             ) : (
               users.map((user) => (
-                <TableRow key={user.supabaseId || user.id} sx={{ 
-                  backgroundColor: user.synced === false ? 'rgba(59, 130, 246, 0.05)' : 'inherit'
-                }}>
-                  <TableCell>
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <span>{user.name}</span>
-                      {user.synced === false && (
-                        <Chip
-                          icon={<NewIcon sx={{ fontSize: 14 }} />}
-                          label="New"
-                          size="small"
-                          sx={{
-                            backgroundColor: '#dbeafe',
-                            color: '#1d4ed8',
-                            fontSize: '0.7rem',
-                            height: 20,
-                            '& .MuiChip-icon': { color: '#3b82f6' }
-                          }}
-                        />
-                      )}
-                    </Stack>
-                  </TableCell>
+                <TableRow key={user.supabaseId || user.id}>
+                  <TableCell>{user.name}</TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>{getRoleChip(user.role)}</TableCell>
                   <TableCell>{getProviderChip(user.provider)}</TableCell>
+                  <TableCell align="center">
+                    {user.supabaseId ? (
+                      <CheckIcon sx={{ color: '#10b981', fontSize: 20 }} />
+                    ) : (
+                      <CancelIcon sx={{ color: '#ef4444', fontSize: 20 }} />
+                    )}
+                  </TableCell>
+                  <TableCell align="center">
+                    {user.id && user.id > 0 ? (
+                      <CheckIcon sx={{ color: '#10b981', fontSize: 20 }} />
+                    ) : (
+                      <CancelIcon sx={{ color: '#ef4444', fontSize: 20 }} />
+                    )}
+                  </TableCell>
+                  <TableCell align="center">
+                    {user.synced !== false ? (
+                      <CheckIcon sx={{ color: '#10b981', fontSize: 20 }} />
+                    ) : (
+                      <CancelIcon sx={{ color: '#f59e0b', fontSize: 20 }} />
+                    )}
+                  </TableCell>
                   <TableCell>{formatDate(user.createdAt)}</TableCell>
                   <TableCell align="right">
                     {user.synced !== false ? (
@@ -459,7 +507,7 @@ const UserManagement: React.FC = () => {
                       </>
                     ) : (
                       <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                        Will sync on first login
+                        Awaiting login
                       </Typography>
                     )}
                   </TableCell>
