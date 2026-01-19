@@ -19,6 +19,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { RootState } from "../../store";
 import { updateUser } from "../../features/auth/authSlice";
 import { api } from "../../services/api";
+import { supabase } from "../../services/supabase";
 import { Helmet } from "react-helmet-async";
 
 const inputOutlineSx = {
@@ -89,16 +90,45 @@ const Profile: React.FC = () => {
         setPasswordError("");
         setPasswordMessage("");
 
-        await api.post("/auth/change-password", {
-          currentPassword: values.currentPassword,
-          newPassword: values.newPassword,
+        // First verify current password by re-authenticating with Supabase
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: user?.email || "",
+          password: values.currentPassword,
         });
+
+        if (signInError) {
+          setPasswordError("Current password is incorrect");
+          setSubmitting(false);
+          return;
+        }
+
+        // Update password in Supabase Auth
+        const { error: updateError } = await supabase.auth.updateUser({
+          password: values.newPassword,
+        });
+
+        if (updateError) {
+          setPasswordError(updateError.message || "Failed to change password");
+          setSubmitting(false);
+          return;
+        }
+
+        // Also update in backend for backward compatibility (optional)
+        try {
+          await api.post("/auth/change-password", {
+            currentPassword: values.currentPassword,
+            newPassword: values.newPassword,
+          });
+        } catch {
+          // Ignore backend errors - Supabase is the source of truth now
+          console.log("Backend password sync skipped (may not be implemented)");
+        }
 
         setPasswordMessage("Password changed successfully!");
         resetForm();
       } catch (error: any) {
         setPasswordError(
-          error.response?.data?.error || "Failed to change password"
+          error.message || "Failed to change password"
         );
       } finally {
         setSubmitting(false);
