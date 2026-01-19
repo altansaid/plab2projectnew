@@ -95,6 +95,7 @@ spring.log
 # Allow specific TypeScript/React component files that contain "password" in their names
 !*Password*.tsx
 !*Password*.ts
+!*Password*.java
 *.pem
 *.key
 *.crt
