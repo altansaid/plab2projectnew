@@ -90,43 +90,124 @@ const Profile: React.FC = () => {
         setPasswordError("");
         setPasswordMessage("");
 
-        // First verify current password by re-authenticating with Supabase
+        const email = user?.email || "";
+        let isVerifiedViaSupabase = false;
+        let isVerifiedViaBackend = false;
+
+        // Step 1: Try to verify current password with Supabase
+        console.log("Verifying password with Supabase...");
         const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: user?.email || "",
+          email: email,
           password: values.currentPassword,
         });
 
-        if (signInError) {
+        if (!signInError) {
+          isVerifiedViaSupabase = true;
+          console.log("Password verified via Supabase");
+        } else {
+          console.log("Supabase verification failed, trying backend...");
+        }
+
+        // Step 2: If Supabase fails, try backend verification
+        if (!isVerifiedViaSupabase) {
+          try {
+            await api.post("/auth/login", {
+              email: email,
+              password: values.currentPassword,
+            });
+            isVerifiedViaBackend = true;
+            console.log("Password verified via backend");
+          } catch (backendError) {
+            console.log("Backend verification also failed");
+          }
+        }
+
+        // If neither verification worked, password is incorrect
+        if (!isVerifiedViaSupabase && !isVerifiedViaBackend) {
           setPasswordError("Current password is incorrect");
           setSubmitting(false);
           return;
         }
 
-        // Update password in Supabase Auth
-        const { error: updateError } = await supabase.auth.updateUser({
-          password: values.newPassword,
-        });
+        // Step 3: If verified via backend but not Supabase, migrate user to Supabase first
+        if (isVerifiedViaBackend && !isVerifiedViaSupabase) {
+          console.log("Migrating user to Supabase...");
+          
+          // Try to create user in Supabase with current password
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email: email,
+            password: values.currentPassword,
+            options: {
+              data: {
+                name: user?.name || email.split('@')[0],
+                full_name: user?.name || email.split('@')[0],
+              },
+            },
+          });
 
-        if (updateError) {
-          setPasswordError(updateError.message || "Failed to change password");
-          setSubmitting(false);
-          return;
+          if (signUpError && !signUpError.message?.includes('already registered')) {
+            console.error("Failed to migrate user to Supabase:", signUpError);
+            // Continue anyway - we'll update backend password
+          } else if (signUpData?.session) {
+            // Migration successful, now we can update Supabase password
+            isVerifiedViaSupabase = true;
+            console.log("User migrated to Supabase successfully");
+          }
+
+          // If user already exists in Supabase but with different password,
+          // we need admin API to update - for now just update backend
+          if (signUpError?.message?.includes('already registered')) {
+            console.log("User exists in Supabase with different password");
+            // We'll still update the backend password and inform user
+          }
         }
 
-        // Also update in backend for backward compatibility (optional)
+        // Step 4: Update password in Supabase (if we have a valid session)
+        let supabaseUpdateSuccess = false;
+        if (isVerifiedViaSupabase) {
+          console.log("Updating password in Supabase...");
+          const { error: updateError } = await supabase.auth.updateUser({
+            password: values.newPassword,
+          });
+
+          if (updateError) {
+            console.error("Failed to update Supabase password:", updateError);
+          } else {
+            supabaseUpdateSuccess = true;
+            console.log("Supabase password updated successfully");
+          }
+        }
+
+        // Step 5: Always update backend password for consistency
+        let backendUpdateSuccess = false;
         try {
+          console.log("Updating password in backend...");
           await api.post("/auth/change-password", {
             currentPassword: values.currentPassword,
             newPassword: values.newPassword,
           });
-        } catch {
-          // Ignore backend errors - Supabase is the source of truth now
-          console.log("Backend password sync skipped (may not be implemented)");
+          backendUpdateSuccess = true;
+          console.log("Backend password updated successfully");
+        } catch (backendError: any) {
+          console.log("Backend password update failed:", backendError?.response?.data?.error);
         }
 
-        setPasswordMessage("Password changed successfully!");
+        // Report result to user
+        if (supabaseUpdateSuccess && backendUpdateSuccess) {
+          setPasswordMessage("Password changed successfully!");
+        } else if (supabaseUpdateSuccess) {
+          setPasswordMessage("Password changed successfully! (Supabase updated)");
+        } else if (backendUpdateSuccess) {
+          setPasswordMessage("Password changed successfully! Please log out and log in again for full sync.");
+        } else {
+          setPasswordError("Failed to change password. Please try again.");
+          setSubmitting(false);
+          return;
+        }
+
         resetForm();
       } catch (error: any) {
+        console.error("Password change error:", error);
         setPasswordError(
           error.message || "Failed to change password"
         );
