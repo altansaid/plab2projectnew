@@ -15,7 +15,8 @@ import {
 import { Link as RouterLink, useNavigate, useLocation } from "react-router-dom";
 import { useFormik } from "formik";
 import * as Yup from "yup";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import { RootState } from "../../store";
 import { loginSuccess, loginStart, loginFailure } from "../../features/auth/authSlice";
 import { api } from "../../services/api";
 import { supabase } from "../../services/supabase";
@@ -37,11 +38,19 @@ const Login: React.FC = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
+  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   const [error, setError] = useState<string>("");
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>("");
 
   const from = location.state?.from?.pathname || "/dashboard";
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, navigate, from]);
 
   // Check for success message from registration
   useEffect(() => {
@@ -76,7 +85,26 @@ const Login: React.FC = () => {
       navigate(from, { replace: true });
     } catch (error) {
       console.error('Failed to handle Supabase session:', error);
-      setError('Failed to complete authentication');
+      // Even if backend fails, we can still log in with basic profile from Supabase
+      const name = session.user.user_metadata?.name ||
+                   session.user.user_metadata?.full_name ||
+                   session.user.email?.split('@')[0] || 'User';
+      
+      dispatch(loginSuccess({
+        user: {
+          id: 0,
+          name: name,
+          email: session.user.email || '',
+          role: 'USER',
+          provider: session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'LOCAL',
+          supabaseId: session.user.id,
+          migratedToSupabase: true,
+        },
+        token: session.access_token,
+        supabaseId: session.user.id,
+      }));
+
+      navigate(from, { replace: true });
     }
   };
 
@@ -85,6 +113,17 @@ const Login: React.FC = () => {
                  session.user.user_metadata?.full_name ||
                  session.user.email?.split('@')[0] || 'User';
     const provider = session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'LOCAL';
+
+    // Basic user profile from Supabase session (fallback)
+    const basicProfile = {
+      id: 0,
+      name: name,
+      email: session.user.email,
+      role: 'USER' as const,
+      provider: provider as 'LOCAL' | 'GOOGLE',
+      supabaseId: session.user.id,
+      migratedToSupabase: true,
+    };
 
     try {
       // Try to get existing profile from backend
@@ -100,8 +139,11 @@ const Login: React.FC = () => {
         migratedToSupabase: true,
       };
     } catch (error: any) {
-      if (error.response?.status === 401 || error.response?.status === 404) {
-        // User doesn't exist in backend yet, create/sync profile
+      const status = error.response?.status;
+      
+      // 401, 403, 404 - try to sync or use basic profile
+      if (status === 401 || status === 403 || status === 404) {
+        // Try to sync user with backend
         try {
           const createResponse = await api.post('/auth/sync-supabase-user', {
             supabaseId: session.user.id,
@@ -117,20 +159,16 @@ const Login: React.FC = () => {
             supabaseId: session.user.id,
             migratedToSupabase: true,
           };
-        } catch (createError) {
-          // If sync endpoint doesn't exist yet, return basic user object
-          return {
-            id: 0,
-            name: name,
-            email: session.user.email,
-            role: 'USER',
-            provider: provider,
-            supabaseId: session.user.id,
-            migratedToSupabase: true,
-          };
+        } catch (syncError) {
+          // Backend not ready for Supabase JWTs - use basic profile
+          console.log('Backend sync failed, using basic profile from Supabase');
+          return basicProfile;
         }
       }
-      throw error;
+      
+      // For other errors, return basic profile instead of failing
+      console.error('Backend profile fetch failed:', error);
+      return basicProfile;
     }
   };
 

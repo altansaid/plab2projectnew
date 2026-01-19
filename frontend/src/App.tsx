@@ -122,38 +122,52 @@ function App() {
   }, [dispatch]);
 
   const getOrCreateUserProfile = async (session: any) => {
+    const name = session.user.user_metadata?.name ||
+                 session.user.user_metadata?.full_name ||
+                 session.user.email?.split('@')[0] || 'User';
+    const provider = session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'LOCAL';
+
+    // Basic profile from Supabase (always works as fallback)
+    const basicProfile = {
+      id: 0,
+      name: name,
+      email: session.user.email,
+      role: 'USER',
+      provider: provider,
+      supabaseId: session.user.id,
+      migratedToSupabase: true,
+    };
+
     try {
       // Try to get existing profile from backend
       const response = await api.get('/auth/profile', {
         headers: { Authorization: `Bearer ${session.access_token}` }
       });
-      return response.data;
+      return {
+        ...response.data,
+        supabaseId: session.user.id,
+        migratedToSupabase: true,
+      };
     } catch (error: any) {
-      // If user doesn't exist in backend, create basic profile
-      const name = session.user.user_metadata?.name ||
-                   session.user.user_metadata?.full_name ||
-                   session.user.email?.split('@')[0] || 'User';
-
       // Try to sync user with backend
       try {
         const syncResponse = await api.post('/auth/sync-supabase-user', {
           supabaseId: session.user.id,
           email: session.user.email,
           name: name,
-          provider: session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'LOCAL',
+          provider: provider,
         }, {
           headers: { Authorization: `Bearer ${session.access_token}` }
         });
-        return syncResponse.data.user;
-      } catch (syncError) {
-        // Return basic user object if sync fails
         return {
-          id: 0,
-          name: name,
-          email: session.user.email,
-          role: 'USER',
-          provider: session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'LOCAL',
+          ...syncResponse.data.user,
+          supabaseId: session.user.id,
+          migratedToSupabase: true,
         };
+      } catch (syncError) {
+        // Backend not ready - return basic profile from Supabase
+        console.log('Using basic profile from Supabase (backend sync unavailable)');
+        return basicProfile;
       }
     }
   };

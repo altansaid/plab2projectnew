@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Button,
@@ -15,6 +15,8 @@ import {
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { useFormik } from "formik";
 import * as Yup from "yup";
+import { useSelector } from "react-redux";
+import { RootState } from "../../store";
 import { supabase } from "../../services/supabase";
 import { Helmet } from "react-helmet-async";
 
@@ -30,8 +32,16 @@ const inputOutlineSx = {
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
+  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   const [error, setError] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const formik = useFormik({
     initialValues: {
