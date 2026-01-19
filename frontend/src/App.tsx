@@ -29,46 +29,81 @@ function App() {
   const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    let isMounted = true;
+
     // Initialize auth state from Supabase
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        console.log('Initializing auth...');
+        const { data: { session }, error } = await supabase.auth.getSession();
 
-        if (session?.user) {
-          // Get or create user profile
-          const userProfile = await getOrCreateUserProfile(session);
+        if (error) {
+          console.error('Supabase getSession error:', error);
+          return;
+        }
 
-          dispatch(loginSuccess({
-            user: userProfile,
-            token: session.access_token,
-            supabaseId: session.user.id,
-          }));
+        if (session?.user && isMounted) {
+          try {
+            const userProfile = await getOrCreateUserProfile(session);
+
+            if (isMounted) {
+              dispatch(loginSuccess({
+                user: userProfile,
+                token: session.access_token,
+                supabaseId: session.user.id,
+              }));
+            }
+          } catch (profileError) {
+            console.error('Failed to get/create user profile:', profileError);
+          }
         }
       } catch (error) {
         console.error('Failed to initialize auth:', error);
       } finally {
+        if (isMounted) {
+          console.log('Auth initialization complete');
+          setIsInitializing(false);
+          dispatch(setLoading(false));
+        }
+      }
+    };
+
+    // Add a timeout to prevent infinite loading
+    timeoutId = setTimeout(() => {
+      if (isMounted) {
+        console.warn('Auth initialization timed out after 5s');
         setIsInitializing(false);
         dispatch(setLoading(false));
       }
-    };
+    }, 5000);
 
     initAuth();
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event);
+      
+      if (!isMounted) return;
+
       if (event === 'SIGNED_IN' && session) {
-        const userProfile = await getOrCreateUserProfile(session);
-        dispatch(loginSuccess({
-          user: userProfile,
-          token: session.access_token,
-          supabaseId: session.user.id,
-        }));
+        try {
+          const userProfile = await getOrCreateUserProfile(session);
+          if (isMounted) {
+            dispatch(loginSuccess({
+              user: userProfile,
+              token: session.access_token,
+              supabaseId: session.user.id,
+            }));
+          }
+        } catch (error) {
+          console.error('Error handling SIGNED_IN:', error);
+        }
       } else if (event === 'SIGNED_OUT') {
         dispatch(logout());
       } else if (event === 'TOKEN_REFRESHED' && session) {
-        // Update token in Redux store when refreshed
         const state = localStorage.getItem('user');
-        if (state) {
+        if (state && isMounted) {
           dispatch(loginSuccess({
             user: JSON.parse(state),
             token: session.access_token,
@@ -78,7 +113,10 @@ function App() {
       }
     });
 
+    // Cleanup function
     return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, [dispatch]);
