@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import { useDispatch } from "react-redux";
+import { Analytics } from "@vercel/analytics/react";
 import { supabase } from "./services/supabase";
 import { loginSuccess, logout, setLoading } from "./features/auth/authSlice";
 import { api } from "./services/api";
@@ -190,44 +191,47 @@ function App() {
   }
 
   return (
-    <Layout>
-      <Routes>
-        {/* Public routes */}
-        <Route path="/" element={<HomePage />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+    <>
+      <Layout>
+        <Routes>
+          {/* Public routes */}
+          <Route path="/" element={<HomePage />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Protected routes */}
-        <Route element={<PrivateRoute />}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/session/create" element={<SessionCreateSimple />} />
-          <Route path="/session/configure" element={<ConfigureSession />} />
-          <Route path="/session/join" element={<SessionJoin />} />
-          <Route
-            path="/session/:sessionCode/configure"
-            element={<ConfigureSession />}
-          />
-          <Route
-            path="/session/:sessionCode/role"
-            element={<RoleSelection />}
-          />
-          <Route path="/session/:sessionCode/room" element={<SessionRoom />} />
-        </Route>
+          {/* Protected routes */}
+          <Route element={<PrivateRoute />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/session/create" element={<SessionCreateSimple />} />
+            <Route path="/session/configure" element={<ConfigureSession />} />
+            <Route path="/session/join" element={<SessionJoin />} />
+            <Route
+              path="/session/:sessionCode/configure"
+              element={<ConfigureSession />}
+            />
+            <Route
+              path="/session/:sessionCode/role"
+              element={<RoleSelection />}
+            />
+            <Route path="/session/:sessionCode/room" element={<SessionRoom />} />
+          </Route>
 
-        {/* Admin routes */}
-        <Route
-          element={
-            <AdminRoute>
-              <AdminPanel />
-            </AdminRoute>
-          }
-          path="/admin"
-        />
-      </Routes>
-    </Layout>
+          {/* Admin routes */}
+          <Route
+            element={
+              <AdminRoute>
+                <AdminPanel />
+              </AdminRoute>
+            }
+            path="/admin"
+          />
+        </Routes>
+      </Layout>
+      <Analytics />
+    </>
   );
 }
 
