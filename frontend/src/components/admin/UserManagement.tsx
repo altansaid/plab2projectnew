@@ -37,6 +37,8 @@ import {
   People as PeopleIcon,
   AdminPanelSettings as AdminIcon,
   Person as UserIcon,
+  ArrowUpward as AscIcon,
+  ArrowDownward as DescIcon,
 } from "@mui/icons-material";
 import { useFormik } from "formik";
 import * as Yup from "yup";
@@ -69,6 +71,8 @@ const UserManagement: React.FC = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("");
+  const [sortBy, setSortBy] = useState<string>("createdAt");
+  const [sortDir, setSortDir] = useState<string>("desc");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -83,6 +87,8 @@ const UserManagement: React.FC = () => {
       const params = new URLSearchParams({
         page: page.toString(),
         size: rowsPerPage.toString(),
+        sortBy: sortBy,
+        sortDir: sortDir,
       });
 
       if (search) params.append("search", search);
@@ -111,7 +117,7 @@ const UserManagement: React.FC = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, [page, rowsPerPage, search, roleFilter]);
+  }, [page, rowsPerPage, search, roleFilter, sortBy, sortDir]);
 
   useEffect(() => {
     fetchStats();
@@ -188,6 +194,26 @@ const UserManagement: React.FC = () => {
       return <Chip label="Email" size="small" variant="outlined" />;
     }
     return <Chip label="Google" size="small" color="info" />;
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "-";
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDir("asc");
+    }
+    setPage(0);
   };
 
   return (
@@ -270,6 +296,33 @@ const UserManagement: React.FC = () => {
               </Select>
             </FormControl>
 
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <InputLabel>Sort By</InputLabel>
+              <Select
+                value={sortBy}
+                onChange={(e) => {
+                  setSortBy(e.target.value);
+                  setPage(0);
+                }}
+                label="Sort By"
+              >
+                <MenuItem value="createdAt">Registration Date</MenuItem>
+                <MenuItem value="name">Name</MenuItem>
+                <MenuItem value="email">Email</MenuItem>
+                <MenuItem value="role">Role</MenuItem>
+              </Select>
+            </FormControl>
+
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
+              startIcon={sortDir === "asc" ? <AscIcon /> : <DescIcon />}
+              sx={{ minWidth: 100 }}
+            >
+              {sortDir === "asc" ? "Asc" : "Desc"}
+            </Button>
+
             <Button
               type="submit"
               variant="contained"
@@ -293,10 +346,43 @@ const UserManagement: React.FC = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Email</TableCell>
-              <TableCell>Role</TableCell>
+              <TableCell 
+                onClick={() => handleSort("name")} 
+                sx={{ cursor: "pointer", "&:hover": { bgcolor: "action.hover" } }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  Name
+                  {sortBy === "name" && (sortDir === "asc" ? <AscIcon fontSize="small" /> : <DescIcon fontSize="small" />)}
+                </Box>
+              </TableCell>
+              <TableCell
+                onClick={() => handleSort("email")}
+                sx={{ cursor: "pointer", "&:hover": { bgcolor: "action.hover" } }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  Email
+                  {sortBy === "email" && (sortDir === "asc" ? <AscIcon fontSize="small" /> : <DescIcon fontSize="small" />)}
+                </Box>
+              </TableCell>
+              <TableCell
+                onClick={() => handleSort("role")}
+                sx={{ cursor: "pointer", "&:hover": { bgcolor: "action.hover" } }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  Role
+                  {sortBy === "role" && (sortDir === "asc" ? <AscIcon fontSize="small" /> : <DescIcon fontSize="small" />)}
+                </Box>
+              </TableCell>
               <TableCell>Account Type</TableCell>
+              <TableCell
+                onClick={() => handleSort("createdAt")}
+                sx={{ cursor: "pointer", "&:hover": { bgcolor: "action.hover" } }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  Registered
+                  {sortBy === "createdAt" && (sortDir === "asc" ? <AscIcon fontSize="small" /> : <DescIcon fontSize="small" />)}
+                </Box>
+              </TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -309,6 +395,7 @@ const UserManagement: React.FC = () => {
                   <TableCell><Skeleton variant="text" width={180} /></TableCell>
                   <TableCell><Skeleton variant="rounded" width={70} height={24} /></TableCell>
                   <TableCell><Skeleton variant="rounded" width={60} height={24} /></TableCell>
+                  <TableCell><Skeleton variant="text" width={90} /></TableCell>
                   <TableCell align="right">
                     <Skeleton variant="circular" width={32} height={32} sx={{ display: 'inline-block', mr: 1 }} />
                     <Skeleton variant="circular" width={32} height={32} sx={{ display: 'inline-block' }} />
@@ -317,7 +404,7 @@ const UserManagement: React.FC = () => {
               ))
             ) : users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                   <Typography color="text.secondary">
                     No users found
                   </Typography>
@@ -330,6 +417,7 @@ const UserManagement: React.FC = () => {
                   <TableCell>{user.email}</TableCell>
                   <TableCell>{getRoleChip(user.role)}</TableCell>
                   <TableCell>{getProviderChip(user.provider)}</TableCell>
+                  <TableCell>{formatDate(user.createdAt)}</TableCell>
                   <TableCell align="right">
                     <IconButton
                       size="small"

@@ -50,4 +50,12 @@ public interface SessionRepository extends JpaRepository<Session, Long> {
             """)
     List<Session> findActiveSessionsByUserIdWithParticipants(@Param("userId") Long userId,
             @Param("isActive") Boolean isActive);
+
+    // Find sessions created by a user
+    List<Session> findByCreatedBy(com.plabpractice.api.model.User user);
+
+    // Update sessions to remove creator reference (for user deletion)
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE Session s SET s.createdBy = null WHERE s.createdBy.id = :userId")
+    void clearCreatorByUserId(@Param("userId") Long userId);
 }

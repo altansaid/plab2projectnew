@@ -58,6 +58,16 @@ public class User {
     @Column(name = "migrated_to_supabase")
     private Boolean migratedToSupabase = false;
 
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+    }
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnore
     private List<SessionParticipant> sessions = new ArrayList<>();

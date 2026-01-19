@@ -1,6 +1,8 @@
 package com.plabpractice.api.repository;
 
 import com.plabpractice.api.model.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -28,24 +30,16 @@ public interface UserRepository extends JpaRepository<User, Long> {
         @Query("SELECT u FROM User u WHERE u.resetToken IS NOT NULL AND u.resetTokenExpiry < :now")
         List<User> findUsersWithExpiredResetTokens(@Param("now") LocalDateTime now);
 
-        // Admin user management queries
-        @Query(value = "SELECT * FROM users u WHERE " +
-                        "(:role IS NULL OR u.role = :role) AND " +
-                        "(:search IS NULL OR LOWER(u.name) LIKE LOWER(CONCAT('%', :search, '%')) " +
-                        "OR LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%'))) " +
-                        "ORDER BY u.id OFFSET :offset ROWS FETCH FIRST :limit ROWS ONLY", nativeQuery = true)
-        List<User> findUsersWithFilters(@Param("role") String role,
-                        @Param("search") String search,
-                        @Param("offset") int offset,
-                        @Param("limit") int limit);
+        // Paginated queries with sorting for admin panel
+        Page<User> findByRole(User.Role role, Pageable pageable);
+        
+        Page<User> findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(
+                String name, String email, Pageable pageable);
+        
+        Page<User> findByRoleAndNameContainingIgnoreCaseOrRoleAndEmailContainingIgnoreCase(
+                User.Role role1, String name, User.Role role2, String email, Pageable pageable);
 
-        @Query(value = "SELECT COUNT(*) FROM users u WHERE " +
-                        "(:role IS NULL OR u.role = :role) AND " +
-                        "(:search IS NULL OR LOWER(u.name) LIKE LOWER(CONCAT('%', :search, '%')) " +
-                        "OR LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%')))", nativeQuery = true)
-        long countUsersWithFilters(@Param("role") String role,
-                        @Param("search") String search);
-
+        // Legacy queries (kept for backward compatibility)
         List<User> findByRole(User.Role role);
 
         @Query("SELECT COUNT(u) FROM User u WHERE u.role = :role")

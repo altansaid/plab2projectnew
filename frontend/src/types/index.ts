@@ -7,6 +7,7 @@ export interface User {
   googleId?: string;
   supabaseId?: string;
   migratedToSupabase?: boolean;
+  createdAt?: string;
 }
 
 export interface Case {

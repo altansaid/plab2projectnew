@@ -1,6 +1,7 @@
 package com.plabpractice.api.controller;
 
 import com.plabpractice.api.model.User;
+import com.plabpractice.api.repository.SessionRepository;
 import com.plabpractice.api.repository.UserRepository;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -25,35 +27,67 @@ public class AdminController {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private SessionRepository sessionRepository;
+
     @GetMapping("/users")
     public ResponseEntity<?> getUsers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "id") String sortBy,
-            @RequestParam(defaultValue = "asc") String sortDir,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir,
             @RequestParam(required = false) String role,
             @RequestParam(required = false) String search) {
         try {
-            String roleStr = null;
-            if (role != null && !role.isEmpty()) {
+            // Validate and map sort field
+            String sortField = switch (sortBy) {
+                case "name" -> "name";
+                case "email" -> "email";
+                case "role" -> "role";
+                case "createdAt" -> "createdAt";
+                default -> "createdAt";
+            };
+
+            Sort sort = sortDir.equalsIgnoreCase("desc") 
+                ? Sort.by(sortField).descending() 
+                : Sort.by(sortField).ascending();
+            
+            Pageable pageable = PageRequest.of(page, size, sort);
+
+            Page<User> userPage;
+            
+            if ((role == null || role.isEmpty()) && (search == null || search.isEmpty())) {
+                // No filters
+                userPage = userRepository.findAll(pageable);
+            } else if (role != null && !role.isEmpty() && (search == null || search.isEmpty())) {
+                // Role filter only
                 try {
                     User.Role roleEnum = User.Role.valueOf(role.toUpperCase());
-                    roleStr = roleEnum.name();
+                    userPage = userRepository.findByRole(roleEnum, pageable);
                 } catch (IllegalArgumentException e) {
-                    // Invalid role, ignore filter
+                    userPage = userRepository.findAll(pageable);
+                }
+            } else if ((role == null || role.isEmpty()) && search != null && !search.isEmpty()) {
+                // Search only
+                userPage = userRepository.findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(
+                    search, search, pageable);
+            } else {
+                // Both filters
+                try {
+                    User.Role roleEnum = User.Role.valueOf(role.toUpperCase());
+                    userPage = userRepository.findByRoleAndNameContainingIgnoreCaseOrRoleAndEmailContainingIgnoreCase(
+                        roleEnum, search, roleEnum, search, pageable);
+                } catch (IllegalArgumentException e) {
+                    userPage = userRepository.findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(
+                        search, search, pageable);
                 }
             }
 
-            int offset = page * size;
-            List<User> users = userRepository.findUsersWithFilters(roleStr, search, offset, size);
-            long totalItems = userRepository.countUsersWithFilters(roleStr, search);
-            int totalPages = (int) Math.ceil((double) totalItems / size);
-
             Map<String, Object> response = new HashMap<>();
-            response.put("users", users);
+            response.put("users", userPage.getContent());
             response.put("currentPage", page);
-            response.put("totalItems", totalItems);
-            response.put("totalPages", totalPages);
+            response.put("totalItems", userPage.getTotalElements());
+            response.put("totalPages", userPage.getTotalPages());
             response.put("pageSize", size);
 
             return ResponseEntity.ok(response);
@@ -117,6 +151,7 @@ public class AdminController {
     }
 
     @DeleteMapping("/users/{userId}")
+    @Transactional
     public ResponseEntity<?> deleteUser(@PathVariable Long userId) {
         try {
             User user = userRepository.findById(userId)
@@ -132,6 +167,11 @@ public class AdminController {
                 }
             }
 
+            // Clear session creator references before deleting user
+            // This sets created_by to NULL for sessions created by this user
+            sessionRepository.clearCreatorByUserId(userId);
+
+            // Now delete the user (cascade will handle SessionParticipant and Feedback)
             userRepository.delete(user);
 
             Map<String, Object> response = new HashMap<>();
