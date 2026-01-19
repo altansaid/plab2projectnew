@@ -15,7 +15,7 @@ import {
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { useFormik } from "formik";
 import * as Yup from "yup";
-import { api } from "../../services/api";
+import { supabase } from "../../services/supabase";
 import { Helmet } from "react-helmet-async";
 
 const inputOutlineSx = {
@@ -59,18 +59,37 @@ const Register: React.FC = () => {
         setError("");
         setIsLoading(true);
 
-        const { confirmPassword, ...registrationData } = values;
-        await api.post("/auth/register", registrationData);
-
-        // Show success message and redirect to login
-        navigate("/login", {
-          state: {
-            message:
-              "Registration successful! Please sign in with your new account.",
+        // Register with Supabase Auth
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: values.email,
+          password: values.password,
+          options: {
+            data: {
+              name: values.name,
+              full_name: values.name,
+            },
           },
         });
+
+        if (signUpError) {
+          if (signUpError.message.includes('already registered')) {
+            setError('This email is already registered. Please sign in instead.');
+          } else {
+            setError(signUpError.message);
+          }
+          return;
+        }
+
+        if (data?.user) {
+          // Registration successful
+          navigate("/login", {
+            state: {
+              message: "Registration successful! Please sign in with your new account.",
+            },
+          });
+        }
       } catch (error: any) {
-        setError(error.response?.data?.error || "Registration failed");
+        setError(error.message || "Registration failed");
       } finally {
         setIsLoading(false);
         setSubmitting(false);

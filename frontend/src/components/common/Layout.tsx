@@ -3,6 +3,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { useNavigate, Link } from "react-router-dom";
 import { RootState } from "../../store";
 import { logout } from "../../features/auth/authSlice";
+import { supabase } from "../../services/supabase";
 import { Helmet } from "react-helmet-async";
 import { Menu as MenuIcon, X } from "lucide-react";
 
@@ -31,7 +32,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     setIsMobileMenuOpen(false);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Error signing out from Supabase:', error);
+    }
     dispatch(logout());
     closeMenus();
     navigate("/");

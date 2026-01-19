@@ -1,44 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { User } from '../../types';
-
-interface DecodedJwtPayload {
-  exp?: number;
-  [key: string]: any;
-}
-
-const base64UrlDecode = (base64Url: string): string => {
-  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = base64.padEnd(base64.length + (4 - (base64.length % 4)) % 4, '=');
-  try {
-    // Decode and handle UTF-8 properly
-    const binary = atob(padded);
-    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-    const decoder = new TextDecoder('utf-8');
-    return decoder.decode(bytes);
-  } catch {
-    return '';
-  }
-};
-
-const getJwtExpirationMs = (token: string): number | null => {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const payloadJson = base64UrlDecode(parts[1]);
-    if (!payloadJson) return null;
-    const payload: DecodedJwtPayload = JSON.parse(payloadJson);
-    if (typeof payload.exp !== 'number') return null;
-    return payload.exp * 1000; // exp is in seconds
-  } catch {
-    return null;
-  }
-};
-
-const isTokenExpired = (token: string): boolean => {
-  const expMs = getJwtExpirationMs(token);
-  if (!expMs) return true; // Treat undecodable/invalid tokens as expired
-  return Date.now() >= expMs;
-};
+import { supabase } from '../../services/supabase';
 
 interface AuthState {
   user: User | null;
@@ -46,47 +8,18 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
   isAuthenticated: boolean;
+  supabaseId: string | null;
 }
 
-// Initialize state with token validation
-const initializeState = (): AuthState => {
-  const token = localStorage.getItem('token');
-  const userStr = localStorage.getItem('user');
-  
-  // Check if token exists and is not expired (basic validation)
-  if (token && userStr) {
-    try {
-      if (isTokenExpired(token)) {
-        // Token expired → force logout state
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-      } else {
-        const user = JSON.parse(userStr);
-        return {
-          user,
-          token,
-          isLoading: false,
-          error: null,
-          isAuthenticated: true,
-        };
-      }
-    } catch (error) {
-      // Clear invalid data
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-    }
-  }
-  
-  return {
-    user: null,
-    token: null,
-    isLoading: false,
-    error: null,
-    isAuthenticated: false,
-  };
+// Initialize state - will be populated by Supabase auth listener
+const initialState: AuthState = {
+  user: null,
+  token: null,
+  isLoading: true, // Start with loading while checking Supabase session
+  error: null,
+  isAuthenticated: false,
+  supabaseId: null,
 };
-
-const initialState: AuthState = initializeState();
 
 const authSlice = createSlice({
   name: 'auth',
@@ -96,16 +29,20 @@ const authSlice = createSlice({
       state.isLoading = true;
       state.error = null;
     },
-    loginSuccess: (state, action: PayloadAction<{ user: User; token: string }>) => {
+    loginSuccess: (state, action: PayloadAction<{ user: User; token: string; supabaseId?: string }>) => {
       state.isLoading = false;
       state.user = action.payload.user;
       state.token = action.payload.token;
       state.isAuthenticated = true;
       state.error = null;
-      
-      // Persist to localStorage
+      state.supabaseId = action.payload.supabaseId || null;
+
+      // Persist to localStorage for backward compatibility
       localStorage.setItem('token', action.payload.token);
       localStorage.setItem('user', JSON.stringify(action.payload.user));
+      if (action.payload.supabaseId) {
+        localStorage.setItem('supabaseId', action.payload.supabaseId);
+      }
     },
     loginFailure: (state, action: PayloadAction<string>) => {
       state.isLoading = false;
@@ -117,10 +54,12 @@ const authSlice = createSlice({
       state.token = null;
       state.isAuthenticated = false;
       state.error = null;
-      
+      state.supabaseId = null;
+
       // Clear localStorage
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      localStorage.removeItem('supabaseId');
     },
     updateUser: (state, action: PayloadAction<User>) => {
       state.user = action.payload;
@@ -131,18 +70,69 @@ const authSlice = createSlice({
     },
     resetLoading: (state) => {
       state.isLoading = false;
+    },
+    setLoading: (state, action: PayloadAction<boolean>) => {
+      state.isLoading = action.payload;
     }
   },
 });
 
-export const { 
-  loginStart, 
-  loginSuccess, 
-  loginFailure, 
-  logout, 
-  updateUser, 
+export const {
+  loginStart,
+  loginSuccess,
+  loginFailure,
+  logout,
+  updateUser,
   clearError,
-  resetLoading
+  resetLoading,
+  setLoading
 } = authSlice.actions;
 
-export default authSlice.reducer; 
+// Async action to initialize auth from Supabase session
+export const initializeAuth = () => async (dispatch: any) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (session?.user) {
+      const userProfile = localStorage.getItem('user');
+      let user: User;
+
+      if (userProfile) {
+        user = JSON.parse(userProfile);
+      } else {
+        // Create user object from Supabase data
+        user = {
+          id: 0, // Will be fetched from backend
+          name: session.user.user_metadata?.name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+          email: session.user.email || '',
+          role: 'USER',
+          provider: session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'LOCAL',
+        };
+      }
+
+      dispatch(loginSuccess({
+        user,
+        token: session.access_token,
+        supabaseId: session.user.id,
+      }));
+    } else {
+      dispatch(resetLoading());
+    }
+  } catch (error) {
+    console.error('Failed to initialize auth:', error);
+    dispatch(resetLoading());
+  }
+};
+
+// Async action to handle Supabase logout
+export const logoutAsync = () => async (dispatch: any) => {
+  try {
+    await supabase.auth.signOut();
+    dispatch(logout());
+  } catch (error) {
+    console.error('Logout error:', error);
+    dispatch(logout()); // Still clear local state
+  }
+};
+
+export default authSlice.reducer;

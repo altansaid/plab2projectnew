@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Card,
@@ -16,8 +16,9 @@ import { Link as RouterLink, useNavigate, useLocation } from "react-router-dom";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { useDispatch } from "react-redux";
-import { loginSuccess } from "../../features/auth/authSlice";
+import { loginSuccess, loginStart, loginFailure } from "../../features/auth/authSlice";
 import { api } from "../../services/api";
+import { supabase } from "../../services/supabase";
 import GoogleSignInButton from "./GoogleSignInButton";
 import { Helmet } from "react-helmet-async";
 
@@ -32,46 +33,13 @@ const inputOutlineSx = {
   "& .MuiInputLabel-root.Mui-focused": { color: "#3b82f6" },
 };
 
-// Google Sign-In types
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (config: {
-            client_id: string;
-            callback: (response: { credential: string }) => void;
-            auto_select?: boolean;
-          }) => void;
-          renderButton: (
-            element: HTMLElement,
-            config: {
-              type?: "standard" | "icon";
-              theme?: "outline" | "filled_blue" | "filled_black";
-              size?: "large" | "medium" | "small";
-              text?: string;
-              shape?: "rectangular" | "pill" | "circle" | "square";
-              logo_alignment?: "left" | "center";
-              width?: number;
-              locale?: string;
-            }
-          ) => void;
-          prompt: () => void;
-        };
-      };
-    };
-  }
-}
-
 const Login: React.FC = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
   const [error, setError] = useState<string>("");
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [isGoogleScriptLoaded, setIsGoogleScriptLoaded] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>("");
-  const googleButtonRef = useRef<HTMLDivElement>(null);
 
   const from = location.state?.from?.pathname || "/dashboard";
 
@@ -79,96 +47,75 @@ const Login: React.FC = () => {
   useEffect(() => {
     if (location.state?.message) {
       setSuccessMessage(location.state.message);
-      // Clear the message from location state
       navigate(location.pathname, { replace: true });
     }
   }, [location, navigate]);
 
-  // Load Google Script
+  // Handle Supabase auth state changes (for OAuth redirects)
   useEffect(() => {
-    const loadGoogleScript = () => {
-      if (
-        !document.querySelector(
-          'script[src="https://accounts.google.com/gsi/client"]'
-        )
-      ) {
-        const script = document.createElement("script");
-        script.src = "https://accounts.google.com/gsi/client";
-        script.async = true;
-        script.defer = true;
-        script.onload = () => {
-          setIsGoogleScriptLoaded(true);
-          setTimeout(() => {
-            initializeGoogleSignIn();
-          }, 100);
-        };
-        document.head.appendChild(script);
-      } else {
-        // Check if Google APIs are available
-        if (window.google?.accounts?.id) {
-          setIsGoogleScriptLoaded(true);
-          initializeGoogleSignIn();
-        } else {
-          // Poll until Google APIs are available
-          const checkGoogle = setInterval(() => {
-            if (window.google?.accounts?.id) {
-              setIsGoogleScriptLoaded(true);
-              initializeGoogleSignIn();
-              clearInterval(checkGoogle);
-            }
-          }, 100);
-
-          // Stop polling after 10 seconds
-          setTimeout(() => {
-            clearInterval(checkGoogle);
-          }, 10000);
-        }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        await handleSupabaseSession(session);
       }
-    };
+    });
 
-    loadGoogleScript();
+    return () => subscription.unsubscribe();
   }, []);
 
-  const initializeGoogleSignIn = () => {
-    if (!window.google?.accounts?.id) {
-      return;
-    }
-
-    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
-    if (
-      !googleClientId ||
-      googleClientId === "your_google_oauth_client_id_here" ||
-      googleClientId.trim() === ""
-    ) {
-      setError(
-        "Google Sign-In is not configured. Please set VITE_GOOGLE_CLIENT_ID environment variable."
-      );
-      return;
-    }
-
+  const handleSupabaseSession = async (session: any) => {
     try {
-      window.google.accounts.id.initialize({
-        client_id: googleClientId,
-        callback: handleGoogleCallback,
-        auto_select: false,
-      });
+      // Try to get or create user profile in backend
+      const userProfile = await getOrCreateUserProfile(session);
 
-      // Render hidden Google button
-      if (googleButtonRef.current) {
-        window.google.accounts.id.renderButton(googleButtonRef.current, {
-          type: "standard",
-          theme: "outline",
-          size: "large",
-          text: "continue_with",
-          shape: "rectangular",
-          logo_alignment: "left",
-          width: 250,
-        });
-      }
+      dispatch(loginSuccess({
+        user: userProfile,
+        token: session.access_token,
+        supabaseId: session.user.id,
+      }));
+
+      navigate(from, { replace: true });
     } catch (error) {
-      console.error("Error initializing Google Sign-In:", error);
-      setError("Failed to initialize Google Sign-In");
+      console.error('Failed to handle Supabase session:', error);
+      setError('Failed to complete authentication');
+    }
+  };
+
+  const getOrCreateUserProfile = async (session: any) => {
+    try {
+      // Try to get existing profile from backend
+      const response = await api.get('/auth/profile', {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 401 || error.response?.status === 404) {
+        // User doesn't exist in backend yet, create profile
+        const name = session.user.user_metadata?.name ||
+                     session.user.user_metadata?.full_name ||
+                     session.user.email?.split('@')[0] || 'User';
+
+        try {
+          const createResponse = await api.post('/auth/sync-supabase-user', {
+            supabaseId: session.user.id,
+            email: session.user.email,
+            name: name,
+            provider: session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'LOCAL',
+          }, {
+            headers: { Authorization: `Bearer ${session.access_token}` }
+          });
+          return createResponse.data.user;
+        } catch (createError) {
+          // If sync endpoint doesn't exist yet, return basic user object
+          return {
+            id: 0,
+            name: name,
+            email: session.user.email,
+            role: 'USER',
+            provider: session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'LOCAL',
+          };
+        }
+      }
+      throw error;
     }
   };
 
@@ -186,61 +133,119 @@ const Login: React.FC = () => {
     onSubmit: async (values, { setSubmitting }) => {
       try {
         setError("");
-        setSuccessMessage(""); // Clear success message on new login attempt
-        const response = await api.post("/auth/login", values);
-        dispatch(loginSuccess(response.data));
-        navigate(from, { replace: true });
+        setSuccessMessage("");
+        dispatch(loginStart());
+
+        // Try Supabase Auth first
+        const { data: supabaseData, error: supabaseError } = await supabase.auth.signInWithPassword({
+          email: values.email,
+          password: values.password,
+        });
+
+        if (supabaseData?.session) {
+          // Supabase login successful
+          await handleSupabaseSession(supabaseData.session);
+          return;
+        }
+
+        // If Supabase fails with "Invalid login credentials", try soft migration
+        if (supabaseError?.message?.includes('Invalid login credentials')) {
+          // Try legacy login and migrate
+          const migrationResult = await tryLegacyLoginAndMigrate(values.email, values.password);
+          if (migrationResult.success) {
+            // If migration returned a session, use it directly
+            if (migrationResult.session) {
+              await handleSupabaseSession(migrationResult.session);
+              return;
+            }
+
+            // Otherwise try to sign in with Supabase
+            const { data: newSession } = await supabase.auth.signInWithPassword({
+              email: values.email,
+              password: values.password,
+            });
+
+            if (newSession?.session) {
+              await handleSupabaseSession(newSession.session);
+              return;
+            }
+          }
+        }
+
+        // If we get here, login failed
+        dispatch(loginFailure(supabaseError?.message || 'Login failed'));
+        setError(supabaseError?.message || 'Invalid email or password');
       } catch (error: any) {
-        setError(error.response?.data?.error || "Login failed");
+        dispatch(loginFailure(error.message || 'Login failed'));
+        setError(error.response?.data?.error || error.message || "Login failed");
       } finally {
         setSubmitting(false);
       }
     },
   });
 
-  const handleGoogleCallback = async (response: { credential: string }) => {
+  const tryLegacyLoginAndMigrate = async (email: string, password: string): Promise<{ success: boolean; session?: any }> => {
     try {
-      setIsGoogleLoading(true);
-      setError("");
-      setSuccessMessage(""); // Clear success message on Google login attempt
+      // Step 1: Verify credentials with legacy backend
+      const legacyResponse = await api.post("/auth/login", { email, password });
 
-      // Google credential received - processing securely (credential not logged for security)
+      if (legacyResponse.data?.user) {
+        // Step 2: Legacy login successful, create user in Supabase
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email: email,
+          password: password,
+          options: {
+            data: {
+              name: legacyResponse.data.user.name,
+              full_name: legacyResponse.data.user.name,
+            },
+          },
+        });
 
-      const result = await api.post("/auth/google", {
-        idToken: response.credential,
-      });
+        if (signUpError) {
+          // If user already exists in Supabase (shouldn't happen), try direct login
+          if (signUpError.message?.includes('already registered')) {
+            return { success: true };
+          }
+          console.error('Supabase signUp error during migration:', signUpError);
+          return { success: false };
+        }
 
-      dispatch(loginSuccess(result.data));
-      navigate(from, { replace: true });
-    } catch (error: any) {
-      console.error("Google authentication error:", error);
-      if (error.response?.status === 401) {
-        setError("Invalid Google account credentials. Please try again.");
-      } else if (error.response?.status === 500) {
-        setError(
-          "Server configuration error. Google OAuth may not be properly configured."
-        );
-      } else if (error.response?.data?.error) {
-        setError(`Google authentication failed: ${error.response.data.error}`);
-      } else {
-        setError("Google authentication failed. Please try again.");
+        // Migration successful - return session if available (auto-login when email confirmation is OFF)
+        console.log('User migrated to Supabase successfully');
+        return { success: true, session: signUpData?.session };
       }
-    } finally {
-      setIsGoogleLoading(false);
+
+      return { success: false };
+    } catch (error: any) {
+      // Legacy login failed - user doesn't exist or wrong password
+      console.log('Legacy login failed:', error.response?.data?.error || error.message);
+      return { success: false };
     }
   };
 
-  const handleGoogleSignIn = () => {
-    if (googleButtonRef.current) {
-      // Find and click the actual Google button inside the hidden div
-      const googleButton = googleButtonRef.current.querySelector(
-        'div[role="button"]'
-      ) as HTMLElement;
-      if (googleButton) {
-        googleButton.click();
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsGoogleLoading(true);
+      setError("");
+      setSuccessMessage("");
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+        },
+      });
+
+      if (error) {
+        setError(error.message || 'Google sign-in failed');
       }
-    } else {
-      setError("Google Sign-In is not available. Please try again later.");
+      // If successful, the page will redirect and onAuthStateChange will handle it
+    } catch (error: any) {
+      console.error("Google authentication error:", error);
+      setError("Google authentication failed. Please try again.");
+    } finally {
+      setIsGoogleLoading(false);
     }
   };
 
@@ -377,21 +382,10 @@ const Login: React.FC = () => {
                 </Typography>
               </Divider>
 
-              {/* Hidden Google button for actual functionality */}
-              <Box
-                ref={googleButtonRef}
-                sx={{
-                  position: "absolute",
-                  top: -9999,
-                  left: -9999,
-                  visibility: "hidden",
-                }}
-              />
-
               <Box sx={{ mb: 2 }}>
                 <GoogleSignInButton
                   onClick={handleGoogleSignIn}
-                  disabled={!isGoogleScriptLoaded}
+                  disabled={false}
                   isLoading={isGoogleLoading}
                 />
               </Box>

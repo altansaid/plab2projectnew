@@ -308,12 +308,80 @@ public class AuthController {
             User user = userRepository.findByEmail(email)
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("user", user);
-            return ResponseEntity.ok(response);
+            // Return user directly (not wrapped) for frontend compatibility
+            return ResponseEntity.ok(user);
         } catch (Exception e) {
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("error", "Failed to fetch profile");
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+    }
+
+    /**
+     * Sync Supabase user with backend database.
+     * Called after a user successfully authenticates via Supabase.
+     * Creates user if not exists, or links Supabase ID to existing user.
+     */
+    @PostMapping("/sync-supabase-user")
+    public ResponseEntity<?> syncSupabaseUser(@Valid @RequestBody SyncSupabaseUserRequest request) {
+        try {
+            // First check if user already exists by email
+            User user = userRepository.findByEmail(request.getEmail()).orElse(null);
+
+            if (user != null) {
+                // User exists, update Supabase ID if not set
+                if (user.getSupabaseId() == null) {
+                    user.setSupabaseId(request.getSupabaseId());
+                    user.setMigratedToSupabase(true);
+
+                    // Update provider if it's a Google user
+                    if ("GOOGLE".equalsIgnoreCase(request.getProvider())) {
+                        user.setProvider(User.AuthProvider.GOOGLE);
+                    }
+
+                    userRepository.save(user);
+                }
+
+                Map<String, Object> response = new HashMap<>();
+                response.put("user", user);
+                response.put("message", "User synced successfully");
+                return ResponseEntity.ok(response);
+            }
+
+            // Check if user exists by Supabase ID
+            User existingBySupabase = userRepository.findBySupabaseId(request.getSupabaseId()).orElse(null);
+            if (existingBySupabase != null) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("user", existingBySupabase);
+                response.put("message", "User already synced");
+                return ResponseEntity.ok(response);
+            }
+
+            // Create new user
+            user = new User();
+            user.setName(request.getName());
+            user.setEmail(request.getEmail());
+            user.setPassword(passwordEncoder.encode(java.util.UUID.randomUUID().toString())); // Random password for Supabase users
+            user.setRole(User.Role.USER);
+            user.setSupabaseId(request.getSupabaseId());
+            user.setMigratedToSupabase(true);
+
+            // Set provider based on request
+            if ("GOOGLE".equalsIgnoreCase(request.getProvider())) {
+                user.setProvider(User.AuthProvider.GOOGLE);
+            } else {
+                user.setProvider(User.AuthProvider.LOCAL);
+            }
+
+            userRepository.save(user);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("user", user);
+            response.put("message", "User created successfully");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to sync user: " + e.getMessage());
             return ResponseEntity.badRequest().body(errorResponse);
         }
     }
@@ -537,6 +605,52 @@ public class AuthController {
 
         public void setNewPassword(String newPassword) {
             this.newPassword = newPassword;
+        }
+    }
+
+    public static class SyncSupabaseUserRequest {
+        @jakarta.validation.constraints.NotBlank(message = "Supabase ID is required")
+        private String supabaseId;
+
+        @jakarta.validation.constraints.NotBlank(message = "Email is required")
+        @jakarta.validation.constraints.Email(message = "Email should be valid")
+        private String email;
+
+        @jakarta.validation.constraints.NotBlank(message = "Name is required")
+        private String name;
+
+        private String provider;
+
+        public String getSupabaseId() {
+            return supabaseId;
+        }
+
+        public void setSupabaseId(String supabaseId) {
+            this.supabaseId = supabaseId;
+        }
+
+        public String getEmail() {
+            return email;
+        }
+
+        public void setEmail(String email) {
+            this.email = email;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getProvider() {
+            return provider;
+        }
+
+        public void setProvider(String provider) {
+            this.provider = provider;
         }
     }
 }

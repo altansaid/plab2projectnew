@@ -51,6 +51,13 @@ public class User {
     @Enumerated(EnumType.STRING)
     private AuthProvider provider = AuthProvider.LOCAL;
 
+    // Supabase Auth integration
+    @Column(name = "supabase_id", unique = true)
+    private String supabaseId;
+
+    @Column(name = "migrated_to_supabase")
+    private Boolean migratedToSupabase = false;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnore
     private List<SessionParticipant> sessions = new ArrayList<>();

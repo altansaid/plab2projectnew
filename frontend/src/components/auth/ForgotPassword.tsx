@@ -15,7 +15,7 @@ import { Email } from "@mui/icons-material";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { Link as RouterLink } from "react-router-dom";
-import { api } from "../../services/api";
+import { supabase } from "../../services/supabase";
 import { Helmet } from "react-helmet-async";
 
 const inputOutlineSx = {
@@ -47,14 +47,19 @@ const ForgotPassword: React.FC = () => {
         setError("");
         setMessage("");
 
-        const response = await api.post("/auth/forgot-password", values);
-        setMessage(response.data.message);
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(values.email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+
+        if (resetError) {
+          setError(resetError.message);
+          return;
+        }
+
+        setMessage("If an account exists with this email, you will receive a password reset link.");
         setIsSubmitted(true);
       } catch (error: any) {
-        setError(
-          error.response?.data?.error ||
-            "Failed to process password reset request"
-        );
+        setError(error.message || "Failed to process password reset request");
       } finally {
         setSubmitting(false);
       }

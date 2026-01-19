@@ -21,6 +21,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
         Optional<User> findByResetToken(String resetToken);
 
+        // Supabase Auth integration
+        Optional<User> findBySupabaseId(String supabaseId);
+
         // Cleanup helpers
         @Query("SELECT u FROM User u WHERE u.resetToken IS NOT NULL AND u.resetTokenExpiry < :now")
         List<User> findUsersWithExpiredResetTokens(@Param("now") LocalDateTime now);

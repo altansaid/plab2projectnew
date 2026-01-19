@@ -14,12 +14,8 @@ import {
 import { Lock } from "@mui/icons-material";
 import { useFormik } from "formik";
 import * as Yup from "yup";
-import {
-  Link as RouterLink,
-  useSearchParams,
-  useNavigate,
-} from "react-router-dom";
-import { api } from "../../services/api";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
+import { supabase } from "../../services/supabase";
 import { Helmet } from "react-helmet-async";
 
 const inputOutlineSx = {
@@ -33,18 +29,54 @@ const inputOutlineSx = {
 };
 
 const ResetPassword: React.FC = () => {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
-  const token = searchParams.get("token");
+  const [isValidSession, setIsValidSession] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    if (!token) {
-      setError("Invalid or missing reset token");
-    }
-  }, [token]);
+    // Check if we have a valid recovery session from Supabase
+    const checkSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+
+        // If there's a session and we're on the reset password page,
+        // the user clicked the reset link
+        if (session) {
+          setIsValidSession(true);
+        } else {
+          // Check URL hash for recovery token (Supabase appends it)
+          const hashParams = new URLSearchParams(window.location.hash.substring(1));
+          const accessToken = hashParams.get('access_token');
+          const type = hashParams.get('type');
+
+          if (accessToken && type === 'recovery') {
+            // Set the session from the recovery link
+            const { error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: hashParams.get('refresh_token') || '',
+            });
+
+            if (!error) {
+              setIsValidSession(true);
+            } else {
+              setError("Invalid or expired reset link. Please request a new one.");
+            }
+          } else {
+            setError("Invalid or expired reset link. Please request a new one.");
+          }
+        }
+      } catch (err) {
+        setError("Failed to verify reset link. Please try again.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkSession();
+  }, []);
 
   const formik = useFormik({
     initialValues: {
@@ -64,32 +96,49 @@ const ResetPassword: React.FC = () => {
         setError("");
         setMessage("");
 
-        if (!token) {
-          setError("Invalid reset token");
+        const { error: updateError } = await supabase.auth.updateUser({
+          password: values.newPassword,
+        });
+
+        if (updateError) {
+          setError(updateError.message);
           return;
         }
 
-        const response = await api.post("/auth/reset-password", {
-          token,
-          newPassword: values.newPassword,
-        });
-
-        setMessage(response.data.message);
+        setMessage("Password reset successfully!");
         setIsSuccess(true);
 
-        // Redirect to login after 3 seconds
-        setTimeout(() => {
-          navigate("/login");
-        }, 3000);
+        // Sign out and redirect to login after 3 seconds
+        setTimeout(async () => {
+          await supabase.auth.signOut();
+          navigate("/login", {
+            state: { message: "Password reset successfully. Please sign in with your new password." }
+          });
+        }, 2000);
       } catch (error: any) {
-        setError(error.response?.data?.error || "Failed to reset password");
+        setError(error.message || "Failed to reset password");
       } finally {
         setSubmitting(false);
       }
     },
   });
 
-  if (!token) {
+  if (isLoading) {
+    return (
+      <Box
+        sx={{
+          minHeight: "calc(100vh - 64px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Typography>Verifying reset link...</Typography>
+      </Box>
+    );
+  }
+
+  if (!isValidSession && !isLoading) {
     return (
       <Container maxWidth="sm">
         <Helmet>
@@ -112,8 +161,7 @@ const ResetPassword: React.FC = () => {
             <CardContent sx={{ p: 4 }}>
               <Box sx={{ textAlign: "center" }}>
                 <Alert severity="error" sx={{ mb: 2 }}>
-                  Invalid or missing reset token. Please request a new password
-                  reset.
+                  {error || "Invalid or expired reset link. Please request a new password reset."}
                 </Alert>
                 <Link
                   component={RouterLink}
@@ -183,7 +231,7 @@ const ResetPassword: React.FC = () => {
                   {isSuccess && (
                     <Box sx={{ mt: 1 }}>
                       <Typography variant="caption" display="block">
-                        Redirecting to login in 3 seconds...
+                        Redirecting to login...
                       </Typography>
                     </Box>
                   )}
