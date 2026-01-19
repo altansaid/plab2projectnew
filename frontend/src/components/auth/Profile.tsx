@@ -34,11 +34,14 @@ const inputOutlineSx = {
 
 const Profile: React.FC = () => {
   const dispatch = useDispatch();
-  const { user } = useSelector((state: RootState) => state.auth);
+  const { user, supabaseId } = useSelector((state: RootState) => state.auth);
   const [profileMessage, setProfileMessage] = useState<string>("");
   const [profileError, setProfileError] = useState<string>("");
   const [passwordMessage, setPasswordMessage] = useState<string>("");
   const [passwordError, setPasswordError] = useState<string>("");
+
+  // Check if user has been migrated to Supabase
+  const isMigratedToSupabase = !!supabaseId;
 
   // Profile update form
   const profileFormik = useFormik({
@@ -69,7 +72,7 @@ const Profile: React.FC = () => {
     },
   });
 
-  // Password change form
+  // Password change form - Only uses Supabase for migrated users
   const passwordFormik = useFormik({
     initialValues: {
       currentPassword: "",
@@ -90,127 +93,35 @@ const Profile: React.FC = () => {
         setPasswordError("");
         setPasswordMessage("");
 
-        const email = user?.email || "";
-        let isVerifiedViaSupabase = false;
-        let isVerifiedViaBackend = false;
-
-        // Step 1: Try to verify current password with Supabase
-        console.log("Verifying password with Supabase...");
+        // Only use Supabase for password changes (clean approach)
+        // Verify current password by re-authenticating
         const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: email,
+          email: user?.email || "",
           password: values.currentPassword,
         });
 
-        if (!signInError) {
-          isVerifiedViaSupabase = true;
-          console.log("Password verified via Supabase");
-        } else {
-          console.log("Supabase verification failed, trying backend...");
-        }
-
-        // Step 2: If Supabase fails, try backend verification
-        if (!isVerifiedViaSupabase) {
-          try {
-            await api.post("/auth/login", {
-              email: email,
-              password: values.currentPassword,
-            });
-            isVerifiedViaBackend = true;
-            console.log("Password verified via backend");
-          } catch (backendError) {
-            console.log("Backend verification also failed");
-          }
-        }
-
-        // If neither verification worked, password is incorrect
-        if (!isVerifiedViaSupabase && !isVerifiedViaBackend) {
+        if (signInError) {
           setPasswordError("Current password is incorrect");
           setSubmitting(false);
           return;
         }
 
-        // Step 3: If verified via backend but not Supabase, migrate user to Supabase first
-        if (isVerifiedViaBackend && !isVerifiedViaSupabase) {
-          console.log("Migrating user to Supabase...");
-          
-          // Try to create user in Supabase with current password
-          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-            email: email,
-            password: values.currentPassword,
-            options: {
-              data: {
-                name: user?.name || email.split('@')[0],
-                full_name: user?.name || email.split('@')[0],
-              },
-            },
-          });
+        // Update password in Supabase Auth
+        const { error: updateError } = await supabase.auth.updateUser({
+          password: values.newPassword,
+        });
 
-          if (signUpError && !signUpError.message?.includes('already registered')) {
-            console.error("Failed to migrate user to Supabase:", signUpError);
-            // Continue anyway - we'll update backend password
-          } else if (signUpData?.session) {
-            // Migration successful, now we can update Supabase password
-            isVerifiedViaSupabase = true;
-            console.log("User migrated to Supabase successfully");
-          }
-
-          // If user already exists in Supabase but with different password,
-          // we need admin API to update - for now just update backend
-          if (signUpError?.message?.includes('already registered')) {
-            console.log("User exists in Supabase with different password");
-            // We'll still update the backend password and inform user
-          }
-        }
-
-        // Step 4: Update password in Supabase (if we have a valid session)
-        let supabaseUpdateSuccess = false;
-        if (isVerifiedViaSupabase) {
-          console.log("Updating password in Supabase...");
-          const { error: updateError } = await supabase.auth.updateUser({
-            password: values.newPassword,
-          });
-
-          if (updateError) {
-            console.error("Failed to update Supabase password:", updateError);
-          } else {
-            supabaseUpdateSuccess = true;
-            console.log("Supabase password updated successfully");
-          }
-        }
-
-        // Step 5: Always update backend password for consistency
-        let backendUpdateSuccess = false;
-        try {
-          console.log("Updating password in backend...");
-          await api.post("/auth/change-password", {
-            currentPassword: values.currentPassword,
-            newPassword: values.newPassword,
-          });
-          backendUpdateSuccess = true;
-          console.log("Backend password updated successfully");
-        } catch (backendError: any) {
-          console.log("Backend password update failed:", backendError?.response?.data?.error);
-        }
-
-        // Report result to user
-        if (supabaseUpdateSuccess && backendUpdateSuccess) {
-          setPasswordMessage("Password changed successfully!");
-        } else if (supabaseUpdateSuccess) {
-          setPasswordMessage("Password changed successfully! (Supabase updated)");
-        } else if (backendUpdateSuccess) {
-          setPasswordMessage("Password changed successfully! Please log out and log in again for full sync.");
-        } else {
-          setPasswordError("Failed to change password. Please try again.");
+        if (updateError) {
+          setPasswordError(updateError.message || "Failed to change password");
           setSubmitting(false);
           return;
         }
 
+        setPasswordMessage("Password changed successfully!");
         resetForm();
       } catch (error: any) {
         console.error("Password change error:", error);
-        setPasswordError(
-          error.message || "Failed to change password"
-        );
+        setPasswordError(error.message || "Failed to change password");
       } finally {
         setSubmitting(false);
       }
@@ -361,8 +272,8 @@ const Profile: React.FC = () => {
               </Card>
             </Paper>
 
-            {/* Password Change */}
-            {user?.provider === "LOCAL" && (
+            {/* Password Change - Only for migrated LOCAL users */}
+            {user?.provider === "LOCAL" && isMigratedToSupabase && (
               <Paper
                 elevation={0}
                 sx={{
@@ -486,6 +397,44 @@ const Profile: React.FC = () => {
                         </Box>
                       </Stack>
                     </form>
+                  </CardContent>
+                </Card>
+              </Paper>
+            )}
+
+            {/* Password Reset Notice - For non-migrated LOCAL users */}
+            {user?.provider === "LOCAL" && !isMigratedToSupabase && (
+              <Paper
+                elevation={0}
+                sx={{
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 3,
+                  backgroundColor: "rgba(255,255,255,0.8)",
+                  backdropFilter: "blur(6px)",
+                  boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+                }}
+              >
+                <Card>
+                  <CardContent>
+                    <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                      <Lock sx={{ mr: 1 }} />
+                      <Typography variant="h6">Password Management</Typography>
+                    </Box>
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                      To change your password, please use the "Forgot Password" feature on the login page. 
+                      This will send you a secure reset link to your email.
+                    </Alert>
+                    <Button
+                      variant="outlined"
+                      href="/forgot-password"
+                      sx={{
+                        borderRadius: 999,
+                        textTransform: "none",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Reset Password
+                    </Button>
                   </CardContent>
                 </Card>
               </Paper>

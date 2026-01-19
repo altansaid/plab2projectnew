@@ -5,6 +5,8 @@ export interface User {
   role: 'USER' | 'ADMIN';
   provider?: 'LOCAL' | 'GOOGLE';
   googleId?: string;
+  supabaseId?: string;
+  migratedToSupabase?: boolean;
 }
 
 export interface Case {

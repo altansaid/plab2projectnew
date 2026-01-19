@@ -81,29 +81,42 @@ const Login: React.FC = () => {
   };
 
   const getOrCreateUserProfile = async (session: any) => {
+    const name = session.user.user_metadata?.name ||
+                 session.user.user_metadata?.full_name ||
+                 session.user.email?.split('@')[0] || 'User';
+    const provider = session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'LOCAL';
+
     try {
       // Try to get existing profile from backend
       const response = await api.get('/auth/profile', {
         headers: { Authorization: `Bearer ${session.access_token}` }
       });
-      return response.data;
+      
+      // Mark user as migrated (has supabaseId from session)
+      const userData = response.data;
+      return {
+        ...userData,
+        supabaseId: session.user.id,
+        migratedToSupabase: true,
+      };
     } catch (error: any) {
       if (error.response?.status === 401 || error.response?.status === 404) {
-        // User doesn't exist in backend yet, create profile
-        const name = session.user.user_metadata?.name ||
-                     session.user.user_metadata?.full_name ||
-                     session.user.email?.split('@')[0] || 'User';
-
+        // User doesn't exist in backend yet, create/sync profile
         try {
           const createResponse = await api.post('/auth/sync-supabase-user', {
             supabaseId: session.user.id,
             email: session.user.email,
             name: name,
-            provider: session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'LOCAL',
+            provider: provider,
           }, {
             headers: { Authorization: `Bearer ${session.access_token}` }
           });
-          return createResponse.data.user;
+          
+          return {
+            ...createResponse.data.user,
+            supabaseId: session.user.id,
+            migratedToSupabase: true,
+          };
         } catch (createError) {
           // If sync endpoint doesn't exist yet, return basic user object
           return {
@@ -111,7 +124,9 @@ const Login: React.FC = () => {
             name: name,
             email: session.user.email,
             role: 'USER',
-            provider: session.user.app_metadata?.provider === 'google' ? 'GOOGLE' : 'LOCAL',
+            provider: provider,
+            supabaseId: session.user.id,
+            migratedToSupabase: true,
           };
         }
       }
@@ -187,32 +202,55 @@ const Login: React.FC = () => {
   const tryLegacyLoginAndMigrate = async (email: string, password: string): Promise<{ success: boolean; session?: any }> => {
     try {
       // Step 1: Verify credentials with legacy backend
+      console.log('Attempting legacy login for migration...');
       const legacyResponse = await api.post("/auth/login", { email, password });
 
       if (legacyResponse.data?.user) {
+        const userName = legacyResponse.data.user.name;
+        console.log('Legacy login successful, migrating to Supabase...');
+        
         // Step 2: Legacy login successful, create user in Supabase
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email: email,
           password: password,
           options: {
             data: {
-              name: legacyResponse.data.user.name,
-              full_name: legacyResponse.data.user.name,
+              name: userName,
+              full_name: userName,
             },
           },
         });
 
         if (signUpError) {
-          // If user already exists in Supabase (shouldn't happen), try direct login
+          // If user already exists in Supabase with different password
           if (signUpError.message?.includes('already registered')) {
-            return { success: true };
+            console.log('User already exists in Supabase - they should use forgot password');
+            // User needs to reset their password via forgot password flow
+            return { success: false };
           }
           console.error('Supabase signUp error during migration:', signUpError);
           return { success: false };
         }
 
-        // Migration successful - return session if available (auto-login when email confirmation is OFF)
-        console.log('User migrated to Supabase successfully');
+        // Step 3: Notify backend about migration (if we have a session)
+        if (signUpData?.session) {
+          try {
+            await api.post('/auth/sync-supabase-user', {
+              supabaseId: signUpData.user?.id,
+              email: email,
+              name: userName,
+              provider: 'LOCAL',
+            }, {
+              headers: { Authorization: `Bearer ${signUpData.session.access_token}` }
+            });
+            console.log('Backend notified about migration');
+          } catch (syncError) {
+            console.log('Backend sync skipped (endpoint may not exist)');
+          }
+        }
+
+        // Migration successful - return session if available
+        console.log('User migrated to Supabase successfully!');
         return { success: true, session: signUpData?.session };
       }
 
