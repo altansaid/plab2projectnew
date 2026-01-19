@@ -86,7 +86,7 @@ const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [feedback, setFeedback] = useState<Feedback[]>([]);
   const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
-
+  const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Helper function to calculate maximum possible score for a feedback
@@ -128,7 +128,7 @@ const Dashboard: React.FC = () => {
     return date.toLocaleString(); // This shows both date and time
   };
 
-  const fetchDashboardData = async (showLoader = false) => {
+  const fetchDashboardData = async (showLoader = false, isInitial = false) => {
     if (showLoader) setIsRefreshing(true);
     try {
       const [feedbackResponse, activeSessionsResponse] = await Promise.all([
@@ -140,11 +140,12 @@ const Dashboard: React.FC = () => {
     } catch (error) {
     } finally {
       if (showLoader) setIsRefreshing(false);
+      if (isInitial) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDashboardData();
+    fetchDashboardData(false, true);
 
     // Poll for new feedback every 30 seconds
     const interval = setInterval(() => {
@@ -162,6 +163,41 @@ const Dashboard: React.FC = () => {
     navigate(`/session/${sessionCode}/room`);
   };
 
+  // Loading skeleton component
+  const LoadingSkeleton = () => (
+    <Box sx={{ mt: 4, mb: 4 }}>
+      <Grid container spacing={3} alignItems="center" sx={{ mb: 4 }}>
+        <Grid item xs>
+          <Skeleton variant="text" width={200} height={40} />
+        </Grid>
+        <Grid item>
+          <Skeleton variant="rounded" width={300} height={40} />
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={4}>
+        <Grid item xs={12}>
+          <Card
+            sx={{
+              border: "1px solid #e5e7eb",
+              borderRadius: 3,
+              backgroundColor: "rgba(255,255,255,0.8)",
+              backdropFilter: "blur(6px)",
+              boxShadow: "0 10px 20px rgba(2, 6, 23, 0.04)",
+            }}
+          >
+            <CardContent>
+              <Skeleton variant="text" width={200} height={32} sx={{ mb: 2 }} />
+              <Skeleton variant="rounded" height={80} sx={{ mb: 2 }} />
+              <Skeleton variant="rounded" height={80} sx={{ mb: 2 }} />
+              <Skeleton variant="rounded" height={80} />
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+    </Box>
+  );
+
   return (
     <Box
       sx={{
@@ -177,6 +213,10 @@ const Dashboard: React.FC = () => {
           <meta name="robots" content="noindex, nofollow" />
           <link rel="canonical" href="https://plab2practice.com/dashboard" />
         </Helmet>
+        
+        {isLoading ? (
+          <LoadingSkeleton />
+        ) : (
         <Box sx={{ mt: 4, mb: 4 }}>
           <Grid container spacing={3} alignItems="center" sx={{ mb: 4 }}>
             <Grid item xs>
@@ -724,6 +764,7 @@ const Dashboard: React.FC = () => {
             </Grid>
           </Grid>
         </Box>
+        )}
       </Container>
     </Box>
   );

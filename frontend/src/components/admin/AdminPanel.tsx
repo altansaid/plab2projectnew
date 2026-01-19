@@ -26,6 +26,8 @@ import {
   Select,
   MenuItem,
   Alert,
+  CircularProgress,
+  Skeleton,
 } from "@mui/material";
 import {
   Delete as DeleteIcon,
@@ -94,9 +96,11 @@ const AdminPanel: React.FC = () => {
   const [categorySearch, setCategorySearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
+      setIsLoading(true);
       try {
         const [casesResponse, categoriesResponse] = await Promise.all([
           api.get("/cases"),
@@ -106,6 +110,8 @@ const AdminPanel: React.FC = () => {
         dispatch(setCategories(categoriesResponse.data));
       } catch (error: any) {
         // Handle error silently or with user-facing notification
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -214,6 +220,45 @@ const AdminPanel: React.FC = () => {
     event.preventDefault();
     // Search is performed in real-time via filteredCategories
   };
+
+  // Loading skeleton for admin panel
+  const AdminLoadingSkeleton = () => (
+    <Box sx={{ mt: 4, mb: 4 }}>
+      <Skeleton variant="text" width={200} height={40} sx={{ mb: 3 }} />
+      <Skeleton variant="rounded" width="100%" height={48} sx={{ mb: 3 }} />
+      
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Stack direction="row" spacing={2}>
+          <Skeleton variant="rounded" width={200} height={40} />
+          <Skeleton variant="rounded" width={150} height={40} />
+          <Skeleton variant="rounded" width={100} height={40} />
+        </Stack>
+      </Paper>
+
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid item xs={12} md={6}>
+          <Skeleton variant="rounded" height={80} />
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Skeleton variant="rounded" height={80} />
+        </Grid>
+      </Grid>
+
+      <Skeleton variant="rounded" width={150} height={40} sx={{ mb: 2 }} />
+      
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Skeleton key={i} variant="rounded" height={60} sx={{ mb: 1 }} />
+      ))}
+    </Box>
+  );
+
+  if (isLoading) {
+    return (
+      <Container maxWidth="lg">
+        <AdminLoadingSkeleton />
+      </Container>
+    );
+  }
 
   return (
     <Container maxWidth="lg">

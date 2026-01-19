@@ -8,6 +8,7 @@ import {
   Container,
   TextField,
   Typography,
+  CircularProgress,
 } from "@mui/material";
 import { api } from "../../services/api";
 import { Helmet } from "react-helmet-async";
@@ -16,16 +17,19 @@ const SessionJoin: React.FC = () => {
   const navigate = useNavigate();
   const [sessionCode, setSessionCode] = useState("");
   const [error, setError] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setIsJoining(true);
 
     try {
       const response = await api.post("/sessions/join", { code: sessionCode });
       navigate(`/session/${sessionCode}/role`);
     } catch (error) {
       setError("Invalid session code or session is full");
+      setIsJoining(false);
     }
   };
 
@@ -82,7 +86,7 @@ const SessionJoin: React.FC = () => {
                 <Button
                   type="submit"
                   variant="contained"
-                  disabled={!sessionCode.trim()}
+                  disabled={!sessionCode.trim() || isJoining}
                   sx={{
                     borderRadius: 999,
                     textTransform: "none",
@@ -97,9 +101,17 @@ const SessionJoin: React.FC = () => {
                       background:
                         "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
                     },
+                    minWidth: 140,
                   }}
                 >
-                  Join Session
+                  {isJoining ? (
+                    <>
+                      <CircularProgress size={20} color="inherit" sx={{ mr: 1 }} />
+                      Joining...
+                    </>
+                  ) : (
+                    "Join Session"
+                  )}
                 </Button>
               </Box>
             </Box>

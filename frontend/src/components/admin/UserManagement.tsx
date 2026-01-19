@@ -27,6 +27,8 @@ import {
   Card,
   CardContent,
   Grid,
+  CircularProgress,
+  Skeleton,
 } from "@mui/material";
 import {
   Delete as DeleteIcon,
@@ -299,30 +301,54 @@ const UserManagement: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell>{user.name}</TableCell>
-                <TableCell>{user.email}</TableCell>
-                <TableCell>{getRoleChip(user.role)}</TableCell>
-                <TableCell>{getProviderChip(user.provider)}</TableCell>
-                <TableCell align="right">
-                  <IconButton
-                    size="small"
-                    onClick={() => handleEditClick(user)}
-                    color="primary"
-                  >
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    onClick={() => handleDeleteClick(user)}
-                    color="error"
-                  >
-                    <DeleteIcon />
-                  </IconButton>
+            {loading ? (
+              // Loading skeleton rows
+              [...Array(rowsPerPage)].map((_, index) => (
+                <TableRow key={`skeleton-${index}`}>
+                  <TableCell><Skeleton variant="text" width={120} /></TableCell>
+                  <TableCell><Skeleton variant="text" width={180} /></TableCell>
+                  <TableCell><Skeleton variant="rounded" width={70} height={24} /></TableCell>
+                  <TableCell><Skeleton variant="rounded" width={60} height={24} /></TableCell>
+                  <TableCell align="right">
+                    <Skeleton variant="circular" width={32} height={32} sx={{ display: 'inline-block', mr: 1 }} />
+                    <Skeleton variant="circular" width={32} height={32} sx={{ display: 'inline-block' }} />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : users.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                  <Typography color="text.secondary">
+                    No users found
+                  </Typography>
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              users.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>{user.name}</TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>{getRoleChip(user.role)}</TableCell>
+                  <TableCell>{getProviderChip(user.provider)}</TableCell>
+                  <TableCell align="right">
+                    <IconButton
+                      size="small"
+                      onClick={() => handleEditClick(user)}
+                      color="primary"
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleDeleteClick(user)}
+                      color="error"
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
 
