@@ -7,6 +7,8 @@ export interface User {
   googleId?: string;
   supabaseId?: string;
   migratedToSupabase?: boolean;
+  synced?: boolean;
+  emailConfirmed?: boolean;
   createdAt?: string;
 }
 

@@ -39,6 +39,7 @@ import {
   Person as UserIcon,
   ArrowUpward as AscIcon,
   ArrowDownward as DescIcon,
+  NewReleases as NewIcon,
 } from "@mui/icons-material";
 import { useFormik } from "formik";
 import * as Yup from "yup";
@@ -412,27 +413,55 @@ const UserManagement: React.FC = () => {
               </TableRow>
             ) : (
               users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>{user.name}</TableCell>
+                <TableRow key={user.supabaseId || user.id} sx={{ 
+                  backgroundColor: user.synced === false ? 'rgba(59, 130, 246, 0.05)' : 'inherit'
+                }}>
+                  <TableCell>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <span>{user.name}</span>
+                      {user.synced === false && (
+                        <Chip
+                          icon={<NewIcon sx={{ fontSize: 14 }} />}
+                          label="New"
+                          size="small"
+                          sx={{
+                            backgroundColor: '#dbeafe',
+                            color: '#1d4ed8',
+                            fontSize: '0.7rem',
+                            height: 20,
+                            '& .MuiChip-icon': { color: '#3b82f6' }
+                          }}
+                        />
+                      )}
+                    </Stack>
+                  </TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>{getRoleChip(user.role)}</TableCell>
                   <TableCell>{getProviderChip(user.provider)}</TableCell>
                   <TableCell>{formatDate(user.createdAt)}</TableCell>
                   <TableCell align="right">
-                    <IconButton
-                      size="small"
-                      onClick={() => handleEditClick(user)}
-                      color="primary"
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleDeleteClick(user)}
-                      color="error"
-                    >
-                      <DeleteIcon />
-                    </IconButton>
+                    {user.synced !== false ? (
+                      <>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleEditClick(user)}
+                          color="primary"
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDeleteClick(user)}
+                          color="error"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </>
+                    ) : (
+                      <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                        Will sync on first login
+                      </Typography>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
