@@ -2,7 +2,6 @@ import axios from 'axios';
 import { Client } from '@stomp/stompjs';
 import { store } from '../store';
 import { logout } from '../features/auth/authSlice';
-import { supabase } from './supabase';
 
 // Environment-based API URLs
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
@@ -14,23 +13,19 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 10000, // 10 second timeout
 });
 
-// Request interceptor for API calls - uses Supabase session token
+// Request interceptor for API calls - uses token from Redux store
+// The token is set from Supabase session in App.tsx
 api.interceptors.request.use(
-  async (config) => {
-    // Try to get token from Supabase session first
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        config.headers.Authorization = `Bearer ${session.access_token}`;
-        return config;
-      }
-    } catch (error) {
-      console.error('Failed to get Supabase session:', error);
+  (config) => {
+    // If Authorization header is already set (explicit), don't override it
+    if (config.headers.Authorization) {
+      return config;
     }
 
-    // Fallback to Redux store token (for backward compatibility during migration)
+    // Use token from Redux store (set by App.tsx from Supabase session)
     const state = store.getState();
     const token = state.auth.token;
 
@@ -49,16 +44,22 @@ api.interceptors.response.use(
   (response) => {
     return response;
   },
-  async (error) => {
+  (error) => {
     const status = error?.response?.status;
+    
+    // Only handle 401 for non-auth endpoints (don't logout during login/profile fetch attempts)
     if (status === 401) {
-      try {
-        // Sign out from Supabase
-        await supabase.auth.signOut();
+      const url = error?.config?.url || '';
+      const isAuthEndpoint = url.includes('/auth/login') || 
+                             url.includes('/auth/profile') || 
+                             url.includes('/auth/sync-supabase-user');
+      
+      // Don't auto-logout for auth endpoints - let the calling code handle it
+      if (!isAuthEndpoint) {
         store.dispatch(logout());
-      } catch {}
-      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-        window.location.href = '/login';
+        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
       }
     }
     return Promise.reject(error);
@@ -73,21 +74,18 @@ let isConnecting = false;
 let connectionAttempts = 0;
 const MAX_CONNECTION_ATTEMPTS = 3;
 
-// Helper to get current auth token (Supabase or localStorage fallback)
-const getAuthToken = async (): Promise<string | null> => {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
-      return session.access_token;
-    }
-  } catch (error) {
-    console.error('Failed to get Supabase session for WebSocket:', error);
+// Helper to get current auth token from Redux store or localStorage
+const getAuthToken = (): string | null => {
+  // Try Redux store first
+  const state = store.getState();
+  if (state.auth.token) {
+    return state.auth.token;
   }
   // Fallback to localStorage
   return localStorage.getItem('token');
 };
 
-export const connectWebSocket = async (sessionCode: string, handlers: {
+export const connectWebSocket = (sessionCode: string, handlers: {
   onSessionUpdate?: (data: any) => void;
   onParticipantUpdate?: (participants: any[]) => void;
   onPhaseChange?: (data: any) => void;
@@ -118,8 +116,8 @@ export const connectWebSocket = async (sessionCode: string, handlers: {
   isConnecting = true;
   connectionAttempts++;
 
-  // Get auth token (async)
-  const token = await getAuthToken();
+  // Get auth token
+  const token = getAuthToken();
 
   stompClient = new Client({
     webSocketFactory: () => {
