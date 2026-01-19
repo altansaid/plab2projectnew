@@ -118,13 +118,17 @@ export const connectWebSocket = (sessionCode: string, handlers: {
 
   // Get auth token
   const token = getAuthToken();
+  
+  // Build WebSocket URL with token as query parameter (SockJS doesn't support headers)
+  const wsUrlWithToken = token ? `${WS_URL}?token=${encodeURIComponent(token)}` : WS_URL;
 
   stompClient = new Client({
     webSocketFactory: () => {
-      // Use SockJS for better compatibility
-      return new (window as any).SockJS(WS_URL);
+      // Use SockJS for better compatibility - pass token in URL
+      return new (window as any).SockJS(wsUrlWithToken);
     },
     connectHeaders: {
+      // Also send in STOMP headers for native WebSocket fallback
       Authorization: token ? `Bearer ${token}` : '',
     },
     // Disable automatic reconnection to prevent infinite loops
